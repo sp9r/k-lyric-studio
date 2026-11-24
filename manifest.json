@@ -1,0 +1,86 @@
+{
+  "manifest_version": 3,
+  "name": "K-Lyric Studio | K-POP・韓国語動画学習",
+  "short_name": "K-Lyric Studio",
+  "version": "1.0.0",
+  "description": "YouTube・YouTube Music の K-POP 楽曲や韓国語動画に、音変化反映の発音併用ガイド（カナ＋ローマ字）・同期台本・語尾分解・曲連動単語帳を追加します。",
+  "icons": {
+    "16": "icons/16.png",
+    "48": "icons/48.png",
+    "128": "icons/128.png"
+  },
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "https://www.youtube.com/*",
+    "https://music.youtube.com/*",
+    "https://lrclib.net/*",
+    "http://127.0.0.1:8788/*",
+    "http://localhost:8788/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "K-Lyric Studio",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/16.png",
+      "48": "icons/48.png",
+      "128": "icons/128.png"
+    }
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.youtube.com/*",
+        "https://music.youtube.com/*"
+      ],
+      "js": [
+        "page_hook.js"
+      ],
+      "world": "MAIN",
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.youtube.com/*",
+        "https://music.youtube.com/*"
+      ],
+      "js": [
+        "lib/hangul.js",
+        "lib/dictionary.js",
+        "lib/srs.js",
+        "content.js"
+      ],
+      "css": [
+        "content.css"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "studio.html",
+        "options.html",
+        "icons/icon.svg"
+      ],
+      "matches": [
+        "https://www.youtube.com/*",
+        "https://music.youtube.com/*"
+      ]
+    }
+  ],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "k-lyric-studio@local.extension",
+      "strict_min_version": "121.0"
+    }
+  }
+}

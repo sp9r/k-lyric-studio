@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>K-Lyric Studio 設定</title>
+  <link rel="stylesheet" href="ui.css" />
+</head>
+<body>
+  <main class="kls-options-wrap">
+    <header class="kls-head">
+      <div class="kls-brand">
+        <img src="icons/icon.svg" alt="" />
+        <span>K-Lyric Studio 設定</span>
+      </div>
+      <a href="studio.html" class="kls-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="M7 10h10"></path></svg>
+        <span>復習スタジオへ</span>
+      </a>
+    </header>
+
+    <section class="kls-section">
+      <h2 class="kls-title">外観テーマと読み方表示</h2>
+      <div class="kls-grid-2">
+        <div>
+          <label class="kls-muted" for="opt-theme">テーマ</label>
+          <select id="opt-theme" class="kls-select">
+            <option value="system">システムに合わせる</option>
+            <option value="light">ライト</option>
+            <option value="dark">ダーク</option>
+          </select>
+        </div>
+        <div>
+          <label class="kls-muted" for="opt-reading">動画上の既定読み方</label>
+          <select id="opt-reading" class="kls-select">
+            <option value="hybrid">併用（カタカナ + 音節ローマ字）</option>
+            <option value="katakana">カタカナのみ</option>
+            <option value="roman">ローマ字のみ</option>
+            <option value="hangul">発音ハングルのみ</option>
+            <option value="off">読み方オフ</option>
+          </select>
+        </div>
+      </div>
+    </section>
+
+    <section class="kls-section" style="display:grid;gap:8px;">
+      <h2 class="kls-title" style="margin:0;">再生操作とショートカット</h2>
+      <label class="kls-row" style="justify-content:flex-start;">
+        <input id="opt-autopause" type="checkbox" />
+        <span>単語クリック時に動画を自動で一時停止する</span>
+      </label>
+      <label class="kls-row" style="justify-content:flex-start;">
+        <input id="opt-shortcuts" type="checkbox" />
+        <span>キーボードショートカットを有効にする（A: 前の行 / D: 次の行 / S: 1行リピート / R: 読み方切替）</span>
+      </label>
+    </section>
+
+    <section class="kls-section" style="display:grid;gap:10px;">
+      <h2 class="kls-title" style="margin:0;">ローカルAIブリッジ連携（オプション）</h2>
+      <p class="kls-muted" style="margin:0;">既定はオフです。有効にすると、字幕がない動画の Whisper 文字起こしと Qwen3.6 文脈解説ボタンをローカルサーバー経由で利用できます。</p>
+      <label class="kls-row" style="justify-content:flex-start;">
+        <input id="opt-bridge" type="checkbox" />
+        <span>ローカルAIブリッジを利用する</span>
+      </label>
+      <div class="kls-row">
+        <div style="flex:1;min-width:220px;">
+          <label class="kls-muted" for="opt-bridge-url">ブリッジ URL</label>
+          <input id="opt-bridge-url" type="text" class="kls-input" placeholder="http://127.0.0.1:8788" />
+        </div>
+        <button id="btn-test-bridge" type="button" class="kls-btn" style="margin-top:18px;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+          <span>接続テスト</span>
+        </button>
+      </div>
+      <div id="bridge-status" class="kls-muted">未テスト</div>
+    </section>
+
+    <section class="kls-section kls-row">
+      <span id="save-status" class="kls-muted">変更は自動または保存ボタンで反映されます</span>
+      <button id="btn-save" type="button" class="kls-btn is-primary">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline></svg>
+        <span>設定を保存</span>
+      </button>
+    </section>
+  </main>
+
+  <script src="options.js"></script>
+</body>
+</html>

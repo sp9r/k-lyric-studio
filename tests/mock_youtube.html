@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ILLIT - Magnetic (Official MV) - YouTube</title>
+  <link rel="stylesheet" href="/content.css" />
+  <style>
+    body {
+      margin: 0;
+      padding: 16px;
+      background: #f9f9f9;
+      color: #0f0f0f;
+      font-family: Inter, "Noto Sans JP", "Noto Sans KR", sans-serif;
+    }
+    .yt-shell {
+      max-width: 1220px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 390px;
+      gap: 18px;
+      align-items: start;
+    }
+    #movie_player {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      background: #14171c;
+      border-radius: 10px;
+      overflow: hidden;
+      border: 1px solid #2c313a;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .mock-stage-top {
+      padding: 14px 18px;
+      color: #c8cfd8;
+      font-size: 13px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: linear-gradient(180deg, rgba(0, 0, 0, 0.45), transparent);
+    }
+    .mock-stage-bar {
+      padding: 10px 16px;
+      color: #d8dee6;
+      font-size: 12px;
+      background: rgba(0, 0, 0, 0.55);
+      display: flex;
+      justify-content: space-between;
+    }
+    video {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      opacity: 0;
+      pointer-events: none;
+    }
+    .yt-meta {
+      margin-top: 12px;
+      padding: 10px 4px;
+    }
+    .yt-meta h1 {
+      margin: 0 0 4px;
+      font-size: 18px;
+    }
+    .yt-meta .ch {
+      font-size: 13px;
+      color: #606060;
+    }
+  </style>
+</head>
+<body>
+  <div class="yt-shell">
+    <div>
+      <div id="movie_player">
+        <video id="mock-video"></video>
+        <div class="mock-stage-top">
+          <span>YouTube Watch Mock Player</span>
+          <span id="mock-time-readout">0:42 / 2:41</span>
+        </div>
+        <div class="mock-stage-bar">
+          <span>再生位置 0:42</span>
+          <span>1080p HD</span>
+        </div>
+      </div>
+      <div class="yt-meta">
+        <h1>ILLIT - Magnetic (Official MV)</h1>
+        <div class="ch">HYBE LABELS</div>
+      </div>
+    </div>
+    <div id="secondary-inner"></div>
+  </div>
+
+  <script>
+    window.__KLS_MANUAL_INIT__ = true;
+    // Stub HTMLMediaElement time & playback state cleanly without requiring a media file
+    const v = document.getElementById("mock-video");
+    let fakeTime = 42.5;
+    let fakePaused = false;
+    let fakeRate = 1.0;
+    Object.defineProperty(v, "currentTime", {
+      get: () => fakeTime,
+      set: (val) => {
+        fakeTime = Number(val) || 0;
+        document.getElementById("mock-time-readout").textContent =
+          Math.floor(fakeTime / 60) + ":" + String(Math.floor(fakeTime % 60)).padStart(2, "0") + " / 2:41";
+      }
+    });
+    Object.defineProperty(v, "duration", { get: () => 161 });
+    Object.defineProperty(v, "paused", { get: () => fakePaused });
+    Object.defineProperty(v, "playbackRate", {
+      get: () => fakeRate,
+      set: (val) => { fakeRate = Number(val) || 1.0; }
+    });
+    v.play = () => { fakePaused = false; return Promise.resolve(); };
+    v.pause = () => { fakePaused = true; };
+  </script>
+  <script src="/lib/hangul.js"></script>
+  <script src="/lib/dictionary.js"></script>
+  <script src="/lib/srs.js"></script>
+  <script src="/content.js"></script>
+  <script>
+    window.KLyricContent.init({
+      isMusic: false,
+      url: "https://www.youtube.com/watch?v=Vk5-c_v4gMU",
+      videoId: "Vk5-c_v4gMU",
+      title: "ILLIT - Magnetic (Official MV)",
+      author: "HYBE LABELS",
+      captionTracks: []
+    }).then(() => {
+      window.KLyricContent.loadCuesForTest(
+        [
+          { id: 0, start: 38, end: 41.5, ko: "이번엔 정말 좋아해", ja: "今度は本当に好きだよ" },
+          { id: 1, start: 42, end: 46.5, ko: "내 맘이 너한테 설레잖아", ja: "私の心が君にときめくじゃない" },
+          { id: 2, start: 47, end: 52, ko: "우리 같이 있으면 어떡해", ja: "私たちが一緒にいたらどうしよう" },
+          { id: 3, start: 75, end: 80, ko: "오늘 연습 진짜 힘들었어", ja: "今日の練習、本当に大変だった" }
+        ],
+        "LRCLIB 同期歌詞"
+      );
+    });
+  </script>
+</body>
+</html>
