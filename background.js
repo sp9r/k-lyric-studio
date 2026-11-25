@@ -1,4 +1,6 @@
 const lrcCache = new Map();
+const trCache = new Map();
+const TR_ENDPOINT = "https://translate.googleapis.com/translate_a/single";
 
 function hasHangul(s) {
   return /[\uAC00-\uD7A3]/.test(String(s || ""));
@@ -73,6 +75,58 @@ async function fetchCaptionJson3(baseUrl) {
   }
 }
 
+async function gtxTranslate(text, sl = "ko", tl = "ja") {
+  const resp = await fetch(TR_ENDPOINT, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+    body: `client=gtx&sl=${sl}&tl=${tl}&dt=t&q=${encodeURIComponent(text)}`
+  });
+  if (!resp.ok) throw new Error(`翻訳 HTTP ${resp.status}`);
+  const data = await resp.json();
+  return (Array.isArray(data && data[0]) ? data[0] : [])
+    .map((seg) => (seg && typeof seg[0] === "string" ? seg[0] : ""))
+    .join("")
+    .replace(/\n$/, "");
+}
+
+// Translates many lines with as few requests as possible; returns an array the same length.
+async function translateLines(lines) {
+  const src = (Array.isArray(lines) ? lines : []).map((l) => String(l || "").replace(/\s+/g, " ").trim());
+  const out = src.map((l) => (trCache.has(l) ? trCache.get(l) : ""));
+  const todo = src.map((l, i) => i).filter((i) => src[i] && !trCache.has(src[i]));
+  const chunks = [];
+  let cur = [];
+  let len = 0;
+  for (const i of todo) {
+    if (cur.length && len + src[i].length > 1500) {
+      chunks.push(cur);
+      cur = [];
+      len = 0;
+    }
+    cur.push(i);
+    len += src[i].length + 1;
+  }
+  if (cur.length) chunks.push(cur);
+  try {
+    for (const chunk of chunks) {
+      let parts = (await gtxTranslate(chunk.map((i) => src[i]).join("\n"))).split("\n");
+      if (parts.length !== chunk.length) {
+        // Line breaks were merged; translate one by one so lines stay matched.
+        parts = [];
+        for (const i of chunk) parts.push(await gtxTranslate(src[i]));
+      }
+      chunk.forEach((i, k) => {
+        const v = String(parts[k] || "").trim();
+        out[i] = v;
+        trCache.set(src[i], v);
+      });
+    }
+    return { ok: true, lines: out };
+  } catch (err) {
+    return { ok: false, lines: out, error: String(err && err.message ? err.message : err) };
+  }
+}
+
 async function callBridge(baseUrl, path, payload) {
   try {
     const endpoint = String(baseUrl || "http://127.0.0.1:8788").replace(/\/+$/, "") + path;
@@ -98,6 +152,11 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 
   if (msg.type === "kls:fetch-caption") {
     fetchCaptionJson3(msg.baseUrl).then(sendResponse);
+    return true;
+  }
+
+  if (msg.type === "kls:translate") {
+    translateLines(msg.lines).then(sendResponse);
     return true;
   }
 

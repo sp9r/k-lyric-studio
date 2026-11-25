@@ -18,6 +18,7 @@
     theme: "system",
     autoPauseOnClick: true,
     shortcutsEnabled: true,
+    showTranslation: true,
     enableBridge: false,
     bridgeUrl: "http://127.0.0.1:8788"
   };
@@ -39,6 +40,7 @@
     spark: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>`,
     chevronDown: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>`,
     chevronUp: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"></polyline></svg>`,
+    translate: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h8"></path><path d="M8 3v2"></path><path d="M5 9c1.5 3 4 5 7 6"></path><path d="M11 5c-1 4-3.5 7-7 9"></path><path d="M13 21l4-9 4 9"></path><path d="M14.5 18h5"></path></svg>`,
     close: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`
   };
 
@@ -130,7 +132,9 @@
     lastLoadedKey: "",
     loadSeq: 0,
     overlayKey: "",
-    dockCollapsed: false
+    dockCollapsed: false,
+    translationNote: "",
+    resizeObs: null
   };
 
   function getReadingLabel(modeId) {
@@ -197,7 +201,30 @@
     el.setAttribute("data-kls-role", "overlay");
     host.appendChild(el);
     state.overlayEl = el;
+    watchOverlaySize(host, el);
     return el;
+  }
+
+  // Scale the subtitle text with the player: small album art stays readable,
+  // full screen does not end up with tiny text.
+  // Use whichever of width / height is tighter so a wide 16:9 video does not get oversized text.
+  function overlayFontPx(width, height) {
+    const byWidth = width * 0.033;
+    const byHeight = height > 0 ? height * 0.042 : byWidth;
+    return Math.round(Math.min(34, Math.max(17, Math.min(byWidth, byHeight))) * 10) / 10;
+  }
+
+  function watchOverlaySize(host, el) {
+    const apply = () => {
+      const r = host.getBoundingClientRect();
+      el.style.setProperty("--kls-fs", `${overlayFontPx(r.width || 640, r.height)}px`);
+    };
+    apply();
+    if (state.resizeObs) state.resizeObs.disconnect();
+    if (typeof ResizeObserver === "function") {
+      state.resizeObs = new ResizeObserver(apply);
+      state.resizeObs.observe(host);
+    }
   }
 
   function ensurePopover() {
@@ -249,7 +276,7 @@
     overlay.classList.remove("kls-hidden");
     // timeupdate fires several times a second; rebuilding the buttons each time would
     // swap them out from under a click, so only rebuild when something visible changed.
-    const renderKey = [cue.start, cue.ko, cue.ja, state.settings.readingMode, state.selectedWord, Object.keys(state.savedCards).length].join("|");
+    const renderKey = [cue.start, cue.ko, cue.ja, state.settings.showTranslation, state.settings.readingMode, state.selectedWord, Object.keys(state.savedCards).length].join("|");
     if (renderKey === state.overlayKey && overlay.firstChild) return;
     state.overlayKey = renderKey;
     const rows = Aligned.rowsForMode(state.settings.readingMode);
@@ -267,7 +294,7 @@
       })
       .join("");
 
-    const jaHtml = cue.ja ? `<div class="kls-overlay-ja">${escapeHtml(cue.ja)}</div>` : "";
+    const jaHtml = cue.ja && state.settings.showTranslation ? `<div class="kls-overlay-ja">${escapeHtml(cue.ja)}</div>` : "";
 
     overlay.innerHTML = `<div class="kls-overlay-ko">${wordButtons}</div>${jaHtml}`;
     overlay.querySelectorAll(".kls-word-btn").forEach((btn) => {
@@ -310,7 +337,7 @@
       surface: key,
       lemma: analysis.lemma || key,
       pos: analysis.pos || "語句",
-      meaning: analysis.meaning || "",
+      meaning: (analysis.matched === false ? analysis.mtMeaning : analysis.meaning) || analysis.mtMeaning || "",
       endingLabel: analysis.endingLabel || "",
       endingMeaning: analysis.endingMeaning || "",
       pronouncedHangul: p.pronouncedHangul || key,
@@ -356,6 +383,8 @@
       .map((r) => `<span class="kls-badge is-accent">${escapeHtml(r)}</span>`)
       .join("");
     const saved = Boolean(state.savedCards[analysis.clean]);
+    // Unknown words come back with a placeholder note instead of a meaning.
+    const dictMeaning = analysis.matched === false ? "" : analysis.meaning || "";
 
     pop.innerHTML = `
       <div class="kls-pop-head">
@@ -383,9 +412,10 @@
           <div class="kls-pop-label">語尾・助詞の分解</div>
           <div class="kls-pop-val">${escapeHtml(analysis.endingLabel)} : ${escapeHtml(analysis.endingMeaning)}</div>
         </div>` : ""}
-        <div class="kls-pop-box">
+        <div class="kls-pop-box kls-pop-meaning">
           <div class="kls-pop-label">意味</div>
-          <div class="kls-pop-val">${escapeHtml(analysis.meaning || "意味メモなし")}</div>
+          ${dictMeaning ? `<div class="kls-pop-val">${escapeHtml(dictMeaning)} <span class="kls-pop-src">内蔵辞書</span></div>` : ""}
+          <div class="kls-pop-val" data-pop="mt">${dictMeaning ? "" : "翻訳中..."}</div>
         </div>
         <div class="kls-pop-box kls-hidden" data-pop="ai-box">
           <div class="kls-pop-label">ローカルAI 文脈解説</div>
@@ -411,6 +441,7 @@
     pop.style.left = `${left}px`;
 
     pop.querySelector('[data-pop="close"]').onclick = () => pop.classList.add("kls-hidden");
+    fillWordMeaning(pop, analysis);
     pop.querySelector('[data-pop="speak"]').onclick = () => speakKorean(analysis.clean);
     pop.querySelector('[data-pop="replay"]').onclick = () => {
       if (state.videoEl && cue) {
@@ -452,6 +483,48 @@
     syncToCurrentTime();
   }
 
+  async function fillWordMeaning(pop, analysis) {
+    const box = pop.querySelector('[data-pop="mt"]');
+    if (!box) return;
+    const lemma = analysis.lemma || analysis.clean;
+    const forms = lemma !== analysis.clean ? [lemma, analysis.clean] : [lemma];
+    const res = await sendBg({ type: "kls:translate", lines: forms });
+    // The user may have opened another word meanwhile.
+    if (state.selectedWord !== analysis.clean || !pop.contains(box)) return;
+    if (!res || !res.ok || !Array.isArray(res.lines) || !res.lines[0]) {
+      box.textContent = analysis.matched !== false && analysis.meaning ? "" : "意味を取得できませんでした（オフライン等）";
+      return;
+    }
+    const [lemmaJa, formJa] = res.lines;
+    analysis.mtMeaning = formJa && formJa !== lemmaJa ? `${lemmaJa}（${formJa}）` : lemmaJa;
+    let html = `${escapeHtml(lemmaJa)}${forms.length > 1 ? ` <span class="kls-pop-src">${escapeHtml(lemma)}</span>` : ""} <span class="kls-pop-src">機械翻訳</span>`;
+    if (formJa && formJa !== lemmaJa) {
+      html += `<div class="kls-pop-sub">この形（${escapeHtml(analysis.clean)}）: ${escapeHtml(formJa)}</div>`;
+    }
+    box.innerHTML = html;
+  }
+
+  // Fill in Japanese for lines that have no translation (LRCLIB lyrics, pasted LRC).
+  async function translateMissing(seq) {
+    const targets = state.rawCues
+      .map((c, i) => ({ c, i }))
+      .filter(({ c }) => !c.ja && /[\uAC00-\uD7A3]/.test(c.ko || ""));
+    if (!targets.length) return;
+    state.translationNote = "訳を取得中";
+    renderDock();
+    const res = await sendBg({ type: "kls:translate", lines: targets.map(({ c }) => c.ko) });
+    if (seq !== state.loadSeq) return;
+    if (res && Array.isArray(res.lines)) {
+      targets.forEach(({ i }, k) => {
+        if (res.lines[k] && state.rawCues[i]) {
+          state.rawCues[i] = { ...state.rawCues[i], ja: res.lines[k], jaMachine: true };
+        }
+      });
+    }
+    state.translationNote = res && res.ok ? "訳は機械翻訳" : "訳の取得に失敗";
+    applyCuesWithOffset();
+  }
+
   function renderDock() {
     const dock = ensureDock();
     if (!dock) return;
@@ -478,7 +551,7 @@
                   ${rep}
                 </div>
                 <div class="kls-line-ko">${Aligned.renderLine(c.ko, state.settings.readingMode)}</div>
-                ${c.ja ? `<div class="kls-line-ja">${escapeHtml(c.ja)}</div>` : ""}
+                ${c.ja && state.settings.showTranslation ? `<div class="kls-line-ja">${escapeHtml(c.ja)}</div>` : ""}
               </button>
             `;
           })
@@ -489,7 +562,7 @@
       <div class="kls-dock-head">
         <div class="kls-brand">${ICONS.music}<span>K-Lyric Studio</span></div>
         <span class="kls-dock-head-right">
-          <span class="kls-status-text">${escapeHtml(state.sourceLabel)} ・ ${state.cues.length}行</span>
+          <span class="kls-status-text">${escapeHtml(state.sourceLabel)} ・ ${state.cues.length}行${state.translationNote ? ` ・ ${escapeHtml(state.translationNote)}` : ""}</span>
           <button type="button" class="kls-btn" data-act="collapse" aria-expanded="${state.dockCollapsed ? "false" : "true"}">${state.dockCollapsed ? ICONS.chevronUp : ICONS.chevronDown}<span>${state.dockCollapsed ? "広げる" : "たたむ"}</span></button>
         </span>
       </div>
@@ -509,6 +582,7 @@
         <button type="button" class="kls-btn${state.autoPauseEnd ? " is-active" : ""}" data-act="autopause">${ICONS.pause}<span>末尾停止</span></button>
         <button type="button" class="kls-btn" data-act="speed">${ICONS.speed}<span>速度 ${speed.toFixed(2).replace(/\.00$/, ".0")}x</span></button>
         <button type="button" class="kls-btn is-active" data-act="reading">${ICONS.eye}<span>${escapeHtml(readLabel)}</span></button>
+        <button type="button" class="kls-btn${state.settings.showTranslation ? " is-active" : ""}" data-act="translation" aria-pressed="${state.settings.showTranslation ? "true" : "false"}">${ICONS.translate}<span>日本語訳${state.settings.showTranslation ? "" : "(非表示)"}</span></button>
         <button type="button" class="kls-btn${state.showLrcBox ? " is-active" : ""}" data-act="toggle-lrc">${ICONS.paste}<span>歌詞・LRC貼付</span></button>
         <button type="button" class="kls-btn" data-act="reload">${ICONS.refresh}<span>再取得</span></button>
         <button type="button" class="kls-btn" data-act="studio">${ICONS.cards}<span>復習スタジオ</span></button>
@@ -564,6 +638,12 @@
       renderDock();
       syncToCurrentTime();
     };
+    dock.querySelector('[data-act="translation"]').onclick = async () => {
+      state.settings.showTranslation = !state.settings.showTranslation;
+      await storageSet({ settings: state.settings });
+      renderDock();
+      syncToCurrentTime();
+    };
     dock.querySelector('[data-act="toggle-lrc"]').onclick = () => {
       state.showLrcBox = !state.showLrcBox;
       renderDock();
@@ -592,7 +672,9 @@
         state.offsetSec = 0;
         state.sourceLabel = "手動LRC";
         state.showLrcBox = false;
+        state.translationNote = "";
         applyCuesWithOffset();
+        translateMissing(state.loadSeq);
       }
     };
     dock.querySelector('[data-act="reload"]').onclick = () => loadSubtitlesForMeta(true);
@@ -637,10 +719,17 @@
     };
 
     dock.querySelectorAll(".kls-line-row").forEach((row) => {
-      row.onclick = () => {
+      row.onclick = (e) => {
         const idx = Number(row.getAttribute("data-cue-idx"));
         const cue = state.cues[idx];
         if (!cue) return;
+        // Clicking a word shows its meaning; clicking elsewhere on the line jumps there.
+        const wordEl = e.target && e.target.closest ? e.target.closest(".kls-al-word[data-word]") : null;
+        if (wordEl) {
+          e.stopPropagation();
+          openWordPopover(wordEl.getAttribute("data-word") || "", cue, wordEl.getBoundingClientRect());
+          return;
+        }
         if (state.videoEl) {
           state.videoEl.currentTime = cue.start;
           if (state.videoEl.paused) state.videoEl.play();
@@ -732,6 +821,7 @@
     // Clear the previous video's lines right away so they never show over the next song.
     state.rawCues = [];
     state.offsetSec = 0;
+    state.translationNote = "";
     if (!state.meta.videoId) {
       state.sourceLabel = "再生待ち";
       applyCuesWithOffset();
@@ -774,6 +864,7 @@
           state.offsetSec = 0;
           state.sourceLabel = "YouTube字幕";
           applyCuesWithOffset();
+          translateMissing(seq);
           return;
         }
       }
@@ -797,6 +888,7 @@
           state.offsetSec = 0;
           state.sourceLabel = "LRCLIB 同期歌詞";
           applyCuesWithOffset();
+          translateMissing(seq);
           return;
         }
       }
