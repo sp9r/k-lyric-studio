@@ -157,3 +157,38 @@ test("aligns readings 1:1 with each hangul syllable and leaves non-hangul runs b
   const html = Aligned.renderLine("같이", "hangul");
   assert.match(html, /kls-al-pron is-changed">치</);
 });
+
+const Act = require("../lib/activation.js");
+
+test("activation: YouTube shows only on allowed channels / keywords", () => {
+  const act = Act.normalize(null);
+  const illit = { isMusic: false, videoId: "a1", title: "ILLIT (아일릿) 'SUPER ILLIT' EP.1", author: "ILLIT", channelId: "UCEpFoWeCMCo5z3EvWaz6hQQ" };
+  const other = { isMusic: false, videoId: "b2", title: "料理動画", author: "誰か", channelId: "UCxxx" };
+  const hybe = { isMusic: false, videoId: "c3", title: "ILLIT (아일릿) 'Magnetic' Official MV", author: "HYBE LABELS", channelId: "UC3IZKseVpdzPSBaWxBxundA" };
+  assert.equal(Act.evaluate(act, illit).active, true);
+  assert.equal(Act.evaluate(act, other).active, false);
+  assert.equal(Act.evaluate(act, hybe).active, true, "keyword ILLIT in the title");
+});
+
+test("activation: YouTube Music shows everywhere except blocked", () => {
+  const song = { isMusic: true, videoId: "m1", title: "Some song", author: "Some artist" };
+  let act = Act.normalize(null);
+  assert.equal(Act.evaluate(act, song).active, true);
+  act = Act.blockHere(act, song, "video");
+  assert.equal(Act.evaluate(act, song).active, false);
+  act = Act.allowHere(act, song, "video");
+  assert.equal(Act.evaluate(act, song).active, true, "allowing again removes the block");
+});
+
+test("activation: allow / block this channel on YouTube", () => {
+  const vid = { isMusic: false, videoId: "z9", title: "vlog", author: "NewJeans", channelId: "UCnj" };
+  let act = Act.normalize(null);
+  act = Act.allowHere(act, vid, "channel");
+  assert.equal(Act.evaluate(act, vid).active, true);
+  assert.equal(Act.evaluate(act, { ...vid, videoId: "z10" }).active, true, "other video, same channel");
+  act = Act.blockHere(act, vid, "video");
+  assert.equal(Act.evaluate(act, vid).active, false, "block beats allow");
+  assert.equal(Act.evaluate(act, { ...vid, videoId: "z10" }).active, true);
+  act = Act.removeRule(act, "youtube", "block", 0);
+  assert.equal(Act.evaluate(act, vid).active, true);
+});

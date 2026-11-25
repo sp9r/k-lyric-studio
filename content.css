@@ -657,3 +657,92 @@ ytmusic-player .kls-subtitle-overlay {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Floating panel: keep the whole panel inside the window. Narrow windows (Vivaldi with
+   side panels, tab bars) used to push the header and buttons off the top of the screen. */
+.kls-dock.is-music-floating {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 86px - 16px);
+}
+
+.kls-dock.is-music-floating.kls-hidden {
+  display: none !important;
+}
+
+.kls-dock.is-music-floating > * {
+  flex: none;
+}
+
+.kls-dock.is-music-floating > .kls-lines {
+  flex: 1 1 auto;
+  min-height: 96px;
+  max-height: 290px;
+}
+
+.kls-lines {
+  position: relative;
+}
+
+/* Overlay on YouTube Music sits above the album art layer */
+.kls-subtitle-overlay.is-music {
+  z-index: 100;
+  bottom: 24px;
+}
+
+/* Why the panel is shown here, and how to turn it off for this channel / video */
+.kls-activation-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--kls-border);
+  font-size: 11px;
+  color: var(--kls-muted, #8a929c);
+}
+
+.kls-activation-row .kls-activation-reason {
+  flex: 1 1 140px;
+  min-width: 0;
+}
+
+.kls-activation-row .kls-btn {
+  white-space: nowrap;
+}
+
+/* Small chip shown on videos where K-Lyric is off */
+.kls-launcher {
+  position: fixed;
+  right: 16px;
+  bottom: 86px;
+  z-index: 9000;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  max-width: min(380px, calc(100vw - 32px));
+  padding: 6px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--kls-border);
+  background: var(--kls-bg);
+  color: var(--kls-text);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
+  font: 12px/1.4 Inter, "Noto Sans JP", "Noto Sans KR", system-ui, sans-serif;
+}
+
+.kls-launcher .kls-launcher-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+}
+
+.kls-launcher svg {
+  width: 14px;
+  height: 14px;
+}
+
+.kls-launcher.kls-hidden {
+  display: none !important;
+}

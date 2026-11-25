@@ -5,6 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>K-Lyric Studio 設定</title>
   <link rel="stylesheet" href="ui.css" />
+  <style>
+    .kls-site-card { display: grid; gap: 8px; align-content: start; padding: 10px; border: 1px solid var(--kls-border, #d0d5dc); border-radius: 8px; }
+    .kls-site-card h3 { margin: 0; font-size: 14px; }
+    .kls-rule-list { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+    .kls-rule-item { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 4px 6px; border-radius: 6px; background: var(--kls-subtle, rgba(127,127,127,0.08)); }
+    .kls-rule-item span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .kls-rule-head { font-size: 12px; font-weight: 600; margin-top: 4px; }
+    .kls-add-row { display: flex; gap: 6px; }
+    .kls-add-row input { flex: 1; min-width: 0; }
+  </style>
 </head>
 <body>
   <main class="kls-options-wrap">
@@ -43,8 +53,18 @@
       </div>
     </section>
 
+    <section class="kls-section" style="display:grid;gap:12px;">
+      <h2 class="kls-title" style="margin:0;">表示する動画</h2>
+      <p class="kls-muted" style="margin:0;">YouTube は登録したチャンネル・動画・キーワードに当てはまる動画だけ、YouTube Music は「非表示」に登録したもの以外のすべてで字幕とパネルを出します。動画の右下に出る「この動画で表示」「このチャンネルでは非表示」からも登録できます。</p>
+      <div class="kls-grid-2" id="activation-sites"></div>
+    </section>
+
     <section class="kls-section" style="display:grid;gap:8px;">
       <h2 class="kls-title" style="margin:0;">再生操作とショートカット</h2>
+      <label class="kls-row" style="justify-content:flex-start;">
+        <input id="opt-overlay" type="checkbox" />
+        <span>動画の上に字幕を表示する（パネルの「動画の字幕」ボタンでも切り替え）</span>
+      </label>
       <label class="kls-row" style="justify-content:flex-start;">
         <input id="opt-autopause" type="checkbox" />
         <span>単語クリック時に動画を自動で一時停止する</span>
@@ -84,6 +104,7 @@
     </section>
   </main>
 
+  <script src="lib/activation.js"></script>
   <script src="options.js"></script>
 </body>
 </html>

@@ -3,6 +3,7 @@
   const Dict = root.KLyricDict;
   const SRS = root.KLyricSRS;
   const Aligned = root.KLyricAligned;
+  const Activation = root.KLyricActivation;
 
   const READING_MODES = [
     { id: "hybrid", label: "併用(カナ+ローマ字)" },
@@ -19,6 +20,7 @@
     autoPauseOnClick: true,
     shortcutsEnabled: true,
     showTranslation: true,
+    showOverlay: true,
     enableBridge: false,
     bridgeUrl: "http://127.0.0.1:8788"
   };
@@ -41,6 +43,9 @@
     chevronDown: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>`,
     chevronUp: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"></polyline></svg>`,
     translate: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h8"></path><path d="M8 3v2"></path><path d="M5 9c1.5 3 4 5 7 6"></path><path d="M11 5c-1 4-3.5 7-7 9"></path><path d="M13 21l4-9 4 9"></path><path d="M14.5 18h5"></path></svg>`,
+    cc: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"></rect><path d="M10 10.5a2 2 0 1 0 0 3"></path><path d="M17 10.5a2 2 0 1 0 0 3"></path></svg>`,
+    plus: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>`,
+    ban: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="4.9" y1="4.9" x2="19.1" y2="19.1"></line></svg>`,
     close: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`
   };
 
@@ -134,8 +139,22 @@
     overlayKey: "",
     dockCollapsed: false,
     translationNote: "",
-    resizeObs: null
+    resizeObs: null,
+    activation: null,
+    activationResult: null,
+    launcherEl: null,
+    captionReqSeq: 0,
+    captionWaiters: {}
   };
+
+  function currentActivation() {
+    if (!Activation) return { active: true, reason: "", mode: "blacklist", site: "youtube" };
+    return Activation.evaluate(state.activation, state.meta);
+  }
+
+  function isActive() {
+    return Boolean(state.activationResult && state.activationResult.active);
+  }
 
   function getReadingLabel(modeId) {
     const found = READING_MODES.find((m) => m.id === modeId);
@@ -197,7 +216,7 @@
     state.overlayKey = "";
 
     const el = document.createElement("div");
-    el.className = "kls-subtitle-overlay kls-hidden";
+    el.className = "kls-subtitle-overlay kls-hidden" + (host.tagName === "YTMUSIC-PLAYER" ? " is-music" : "");
     el.setAttribute("data-kls-role", "overlay");
     host.appendChild(el);
     state.overlayEl = el;
@@ -239,11 +258,27 @@
     return el;
   }
 
+  // Other extensions (Enhancer for YouTube "hide related videos", uBlock cosmetic filters,
+  // custom CSS) can hide the right-hand column. A panel mounted there would vanish with it,
+  // so only use the column when it is actually on screen.
+  function isShown(el) {
+    if (!el || !el.isConnected) return false;
+    for (let n = el; n && n !== document.body; n = n.parentElement) {
+      const cs = getComputedStyle(n);
+      if (cs.display === "none" || cs.visibility === "hidden") return false;
+    }
+    const r = el.getBoundingClientRect();
+    return r.width >= 200;
+  }
+
+  function sideColumn() {
+    const candidates = [document.querySelector("#kls-dock-host"), document.querySelector("#secondary-inner"), document.querySelector("#secondary")];
+    return candidates.find((c) => isShown(c)) || null;
+  }
+
   function ensureDock() {
     const isMusic = location.hostname === "music.youtube.com";
-    const mountTarget = isMusic
-      ? document.body
-      : document.querySelector("#secondary-inner, #secondary, #kls-dock-host") || document.body;
+    const mountTarget = isMusic ? document.body : sideColumn() || document.body;
 
     if (state.dockEl && state.dockEl.parentElement === mountTarget) {
       return state.dockEl;
@@ -267,7 +302,7 @@
     const overlay = ensureOverlay();
     if (!overlay) return;
 
-    if (!state.settings.enabled || !cue || !cue.ko) {
+    if (!state.settings.enabled || !state.settings.showOverlay || !isActive() || !cue || !cue.ko) {
       overlay.classList.add("kls-hidden");
       state.overlayKey = "";
       return;
@@ -525,10 +560,72 @@
     applyCuesWithOffset();
   }
 
+  async function saveActivation(next) {
+    state.activation = next;
+    await storageSet({ activation: next });
+    refreshActivation(true);
+  }
+
+  // Chip shown on videos where the panel is off, so it can be turned on in one click.
+  function renderLauncher() {
+    const show = state.settings.enabled && !isActive() && Boolean(state.meta.videoId);
+    if (!show) {
+      if (state.launcherEl) state.launcherEl.classList.add("kls-hidden");
+      return;
+    }
+    if (!state.launcherEl || !state.launcherEl.isConnected) {
+      const el = document.createElement("div");
+      el.className = "kls-launcher";
+      el.setAttribute("data-kls-role", "launcher");
+      document.body.appendChild(el);
+      state.launcherEl = el;
+    }
+    const el = state.launcherEl;
+    el.classList.remove("kls-hidden");
+    const res = state.activationResult || {};
+    const blocked = Boolean(res.rule);
+    const canChannel = Boolean(state.meta.channelId || state.meta.author);
+    el.title = res.reason || "";
+    el.innerHTML = `
+      <span class="kls-launcher-label">${ICONS.music}<span>K-Lyric</span></span>
+      <button type="button" class="kls-btn" data-act="allow-video">${ICONS.plus}<span>${blocked ? "この動画で再表示" : "この動画で表示"}</span></button>
+      ${canChannel && res.mode === "whitelist" ? `<button type="button" class="kls-btn" data-act="allow-channel">${ICONS.plus}<span>このチャンネルで表示</span></button>` : ""}
+    `;
+    el.querySelector('[data-act="allow-video"]').onclick = () => saveActivation(Activation.allowHere(state.activation, state.meta, "video"));
+    const chBtn = el.querySelector('[data-act="allow-channel"]');
+    if (chBtn) chBtn.onclick = () => saveActivation(Activation.allowHere(state.activation, state.meta, "channel"));
+  }
+
+  function activationRowHtml() {
+    const res = state.activationResult || {};
+    const canChannel = Boolean(state.meta.channelId || state.meta.author);
+    return `
+      <div class="kls-activation-row">
+        <span class="kls-activation-reason">${escapeHtml(res.reason || "")}</span>
+        <button type="button" class="kls-btn" data-act="block-video">${ICONS.ban}<span>この動画では非表示</span></button>
+        ${canChannel ? `<button type="button" class="kls-btn" data-act="block-channel">${ICONS.ban}<span>このチャンネルでは非表示</span></button>` : ""}
+      </div>
+    `;
+  }
+
+  // Re-evaluate the show/hide rules for the current video. `force` reloads lyrics when the
+  // panel just became active.
+  function refreshActivation(force) {
+    const prev = isActive();
+    state.activationResult = currentActivation();
+    const now = isActive();
+    renderLauncher();
+    renderDock();
+    if (now && (!prev || force)) {
+      loadSubtitlesForMeta(false);
+    }
+    syncToCurrentTime();
+  }
+
   function renderDock() {
     const dock = ensureDock();
     if (!dock) return;
-    if (!state.settings.enabled) {
+    if (!state.settings.enabled || !isActive()) {
       dock.classList.add("kls-hidden");
       return;
     }
@@ -566,6 +663,7 @@
           <button type="button" class="kls-btn" data-act="collapse" aria-expanded="${state.dockCollapsed ? "false" : "true"}">${state.dockCollapsed ? ICONS.chevronUp : ICONS.chevronDown}<span>${state.dockCollapsed ? "広げる" : "たたむ"}</span></button>
         </span>
       </div>
+      ${activationRowHtml()}
       <div class="kls-cov-wrap">
         <div class="kls-cov-row">
           <span>曲内の語彙カバー</span>
@@ -582,6 +680,7 @@
         <button type="button" class="kls-btn${state.autoPauseEnd ? " is-active" : ""}" data-act="autopause">${ICONS.pause}<span>末尾停止</span></button>
         <button type="button" class="kls-btn" data-act="speed">${ICONS.speed}<span>速度 ${speed.toFixed(2).replace(/\.00$/, ".0")}x</span></button>
         <button type="button" class="kls-btn is-active" data-act="reading">${ICONS.eye}<span>${escapeHtml(readLabel)}</span></button>
+        <button type="button" class="kls-btn${state.settings.showOverlay ? " is-active" : ""}" data-act="overlay" aria-pressed="${state.settings.showOverlay ? "true" : "false"}">${ICONS.cc}<span>動画の字幕${state.settings.showOverlay ? "" : "(非表示)"}</span></button>
         <button type="button" class="kls-btn${state.settings.showTranslation ? " is-active" : ""}" data-act="translation" aria-pressed="${state.settings.showTranslation ? "true" : "false"}">${ICONS.translate}<span>日本語訳${state.settings.showTranslation ? "" : "(非表示)"}</span></button>
         <button type="button" class="kls-btn${state.showLrcBox ? " is-active" : ""}" data-act="toggle-lrc">${ICONS.paste}<span>歌詞・LRC貼付</span></button>
         <button type="button" class="kls-btn" data-act="reload">${ICONS.refresh}<span>再取得</span></button>
@@ -644,6 +743,15 @@
       renderDock();
       syncToCurrentTime();
     };
+    dock.querySelector('[data-act="overlay"]').onclick = async () => {
+      state.settings.showOverlay = !state.settings.showOverlay;
+      await storageSet({ settings: state.settings });
+      renderDock();
+      syncToCurrentTime();
+    };
+    dock.querySelector('[data-act="block-video"]').onclick = () => saveActivation(Activation.blockHere(state.activation, state.meta, "video"));
+    const blockCh = dock.querySelector('[data-act="block-channel"]');
+    if (blockCh) blockCh.onclick = () => saveActivation(Activation.blockHere(state.activation, state.meta, "channel"));
     dock.querySelector('[data-act="toggle-lrc"]').onclick = () => {
       state.showLrcBox = !state.showLrcBox;
       renderDock();
@@ -739,11 +847,31 @@
         renderDock();
       };
     });
+    keepCurrentLineInView();
+  }
+
+  // Keep the playing line second from the bottom of the list, so the next line is visible
+  // under it. Near the end of the song the list simply stops scrolling.
+  function keepCurrentLineInView() {
+    const dock = state.dockEl;
+    if (!dock) return;
+    const list = dock.querySelector(".kls-lines");
+    const cur = list && list.querySelector(".kls-line-row.is-current");
+    if (!list || !cur || !list.clientHeight) return;
+    const next = cur.nextElementSibling && cur.nextElementSibling.classList.contains("kls-line-row") ? cur.nextElementSibling : null;
+    const gap = 4;
+    const pad = 6;
+    const bottom = cur.offsetTop + cur.offsetHeight + (next ? gap + next.offsetHeight : 0) + pad;
+    let target = bottom - list.clientHeight;
+    // A line taller than the list (or one with a very tall next line) must still show its top.
+    if (cur.offsetTop - pad < target) target = cur.offsetTop - pad;
+    target = Math.max(0, Math.min(target, list.scrollHeight - list.clientHeight));
+    if (Math.abs(list.scrollTop - target) > 1) list.scrollTop = target;
   }
 
   function syncToCurrentTime() {
     const v = state.videoEl || findVideoElement();
-    if (!v || !state.cues.length) {
+    if (!v || !state.cues.length || !isActive()) {
       renderOverlay(null);
       return;
     }
@@ -786,10 +914,7 @@
         state.dockEl.querySelectorAll(".kls-line-row").forEach((row, i) => {
           row.classList.toggle("is-current", i === foundIdx);
         });
-        const curEl = state.dockEl.querySelector(".kls-line-row.is-current");
-        if (curEl && typeof curEl.scrollIntoView === "function") {
-          curEl.scrollIntoView({ block: "nearest" });
-        }
+        keepCurrentLineInView();
       }
     }
     renderOverlay(foundIdx >= 0 ? state.cues[foundIdx] : null);
@@ -811,7 +936,37 @@
     }
   }
 
+  // YouTube now refuses caption downloads that lack the player's proof-of-origin token, so the
+  // background fetch comes back empty on many videos. The page hook can switch the player's
+  // own captions on for a moment and reuse the signed URL it requests.
+  function requestPageCaptions(videoId) {
+    const id = ++state.captionReqSeq;
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        delete state.captionWaiters[id];
+        resolve(null);
+      }, 25000);
+      state.captionWaiters[id] = (data) => {
+        clearTimeout(timer);
+        delete state.captionWaiters[id];
+        resolve(data);
+      };
+      window.postMessage({ source: "kls-request-captions", reqId: id, videoId }, "*");
+    });
+  }
+
+  function looksLikeSongTitle(title) {
+    return /\b(m\/?v|official\s+(music\s+)?video|official\s+audio|lyrics?|audio|music\s+video|performance\s+video|dance\s+practice|cover|visualizer)\b|가사|뮤직비디오|歌詞|歌ってみた/i.test(String(title || ""));
+  }
+
+  function cuesFromCaptionPair(koJson, jaJson) {
+    const koCues = koJson ? Hangul.parseYouTubeJson3(koJson) : [];
+    const jaCues = jaJson ? Hangul.parseYouTubeJson3(jaJson) : [];
+    return Hangul.mergeDualSubtitles(koCues, jaCues);
+  }
+
   async function loadSubtitlesForMeta(force = false) {
+    if (!isActive()) return;
     const key = `${state.meta.videoId}|${state.meta.title}`;
     if (!force && key === state.lastLoadedKey) return;
     state.lastLoadedKey = key;
@@ -868,6 +1023,23 @@
           return;
         }
       }
+
+      // 1b. Direct download was refused: let the player fetch them.
+      state.sourceLabel = "字幕を取得中";
+      renderDock();
+      const viaPage = await requestPageCaptions(state.meta.videoId);
+      if (stale()) return;
+      if (viaPage && viaPage.ok && viaPage.ko) {
+        const merged = cuesFromCaptionPair(viaPage.ko, viaPage.ja);
+        if (merged.length) {
+          state.rawCues = merged;
+          state.offsetSec = 0;
+          state.sourceLabel = "YouTube字幕";
+          applyCuesWithOffset();
+          translateMissing(seq);
+          return;
+        }
+      }
     }
 
     // 2. Try LRCLIB synced lyrics using cleaned title & author
@@ -881,7 +1053,12 @@
       const dur = state.videoEl && state.videoEl.duration ? state.videoEl.duration : 0;
       const lrcResp = await sendBg({ type: "kls:fetch-lrclib", query, duration: dur });
       if (stale()) return;
-      if (lrcResp && lrcResp.ok && lrcResp.syncedLyrics) {
+      // On regular YouTube many videos are not songs (vlogs, variety shows). Only trust a
+      // lyrics hit when the title says it is a song (MVs run longer than the track), or when
+      // the lengths match; otherwise a random song would be laid over a talk video.
+      const lengthOk = dur > 0 && lrcResp && Number(lrcResp.duration) > 0 && Math.abs(Number(lrcResp.duration) - dur) <= 15;
+      const trusted = state.meta.isMusic || lengthOk || looksLikeSongTitle(state.meta.title);
+      if (lrcResp && lrcResp.ok && lrcResp.syncedLyrics && trusted) {
         const parsed = Hangul.parseLrc(lrcResp.syncedLyrics);
         if (parsed.length) {
           state.rawCues = parsed;
@@ -899,9 +1076,11 @@
   }
 
   function handleKeydown(e) {
-    if (!state.settings.enabled || !state.settings.shortcutsEnabled) return;
-    const tag = (e.target && e.target.tagName || "").toLowerCase();
-    if (tag === "input" || tag === "textarea" || e.target?.isContentEditable) return;
+    if (!state.settings.enabled || !state.settings.shortcutsEnabled || !isActive()) return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    const origin = (typeof e.composedPath === "function" && e.composedPath()[0]) || e.target;
+    const tag = (origin && origin.tagName || "").toLowerCase();
+    if (tag === "input" || tag === "textarea" || origin?.isContentEditable) return;
 
     const k = String(e.key || "").toLowerCase();
     if (k === "a" && state.cues.length) {
@@ -925,26 +1104,46 @@
   }
 
   async function init(initialMeta) {
-    const stored = await storageGet(["settings", "savedCards", "dockCollapsed"]);
+    const stored = await storageGet(["settings", "savedCards", "dockCollapsed", "activation"]);
     state.dockCollapsed = Boolean(stored.dockCollapsed);
     if (stored.settings) state.settings = { ...DEFAULT_SETTINGS, ...stored.settings };
     if (stored.savedCards && typeof stored.savedCards === "object") state.savedCards = stored.savedCards;
+    state.activation = Activation ? Activation.normalize(stored.activation) : null;
     if (initialMeta) state.meta = { ...state.meta, ...initialMeta };
+    state.activationResult = currentActivation();
 
     attachVideoListener();
-    ensureDock();
     renderDock();
+    renderLauncher();
 
     window.addEventListener("message", (event) => {
-      if (event.source !== window || !event.data || event.data.source !== "kls-page-hook") return;
+      if (event.source !== window || !event.data) return;
+      if (event.data.source === "kls-page-captions") {
+        const waiter = state.captionWaiters[event.data.reqId];
+        if (waiter) waiter(event.data);
+        return;
+      }
+      if (event.data.source !== "kls-page-hook") return;
       state.meta = { ...state.meta, ...event.data };
       attachVideoListener();
-      ensureDock();
+      refreshActivation(false);
       loadSubtitlesForMeta(false);
     });
 
+    // The right-hand column can appear, disappear or be hidden by another extension after
+    // the page loads (theater mode, Enhancer settings), so re-check where the panel lives.
+    setInterval(() => {
+      if (!state.settings.enabled || !isActive() || state.meta.isMusic) return;
+      const want = sideColumn() || document.body;
+      if (state.dockEl && state.dockEl.parentElement !== want) renderDock();
+    }, 2000);
+
     if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged) {
       chrome.storage.onChanged.addListener((changes) => {
+        if (changes.activation) {
+          state.activation = Activation.normalize(changes.activation.newValue);
+          refreshActivation(false);
+        }
         if (changes.settings && changes.settings.newValue) {
           state.settings = { ...DEFAULT_SETTINGS, ...changes.settings.newValue };
           renderDock();

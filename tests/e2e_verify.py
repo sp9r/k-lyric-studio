@@ -75,6 +75,37 @@ def run_e2e() -> None:
             assert "0.85x" in page.locator('[data-act="speed"]').inner_text()
             page.locator('[data-act="offset-plus"]').click()
             assert "+0.5s" in page.locator(".kls-offset-row").inner_text()
+            page.locator('[data-act="loop"]').click()
+
+            # Subtitle on/off toggle hides only the video overlay, not the panel
+            page.locator('[data-act="overlay"]').click()
+            page.wait_for_selector(".kls-subtitle-overlay.kls-hidden", state="attached")
+            assert "(非表示)" in page.locator('[data-act="overlay"]').inner_text()
+            assert page.locator(".kls-dock:not(.kls-hidden)").count() == 1
+            page.locator('[data-act="overlay"]').click()
+            page.wait_for_selector(".kls-subtitle-overlay:not(.kls-hidden)")
+
+            # Display rule row is shown with the reason (mock title contains ILLIT)
+            assert "ILLIT" in page.locator(".kls-activation-row").inner_text()
+
+            # The playing line sits second from the bottom, with the next line visible below it
+            page.evaluate("""() => {
+                const cues = Array.from({ length: 24 }, (_, i) => ({ id: i, start: i * 4, end: i * 4 + 3.8, ko: '이번엔 정말 좋아해 ' + (i + 1), ja: '今度は本当に好きだよ' }));
+                window.KLyricContent.loadCuesForTest(cues, 'スクロール確認');
+                document.getElementById('mock-video').currentTime = 12 * 4 + 1;
+                window.KLyricContent.syncToCurrentTime();
+            }""")
+            pos = page.evaluate("""() => {
+                const list = document.querySelector('.kls-lines');
+                const lr = list.getBoundingClientRect();
+                const cur = list.querySelector('.kls-line-row.is-current');
+                const next = cur.nextElementSibling;
+                const cr = cur.getBoundingClientRect(), nr = next.getBoundingClientRect();
+                return { idx: cur.dataset.cueIdx, curVisible: cr.top >= lr.top - 1 && cr.bottom <= lr.bottom + 1,
+                         nextVisible: nr.top >= lr.top - 1 && nr.bottom <= lr.bottom + 1,
+                         nextNearBottom: lr.bottom - nr.bottom < 12, scrolled: list.scrollTop > 0 };
+            }""")
+            assert pos["idx"] == "12" and pos["curVisible"] and pos["nextVisible"] and pos["nextNearBottom"] and pos["scrolled"], f"Current line position wrong: {pos}"
 
             assert_no_overflow(page, "player-desktop")
             page.screenshot(path=str(DOCS / "screenshot-player.png"), full_page=False)
