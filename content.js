@@ -22,6 +22,7 @@
     showTranslation: true,
     showOverlay: true,
     showHanja: true,
+    showGloss: true,
     enableBridge: false,
     bridgeUrl: "http://127.0.0.1:8788"
   };
@@ -122,6 +123,8 @@
       captionTracks: []
     },
     rawCues: [],
+    glossMap: {},
+    glossVersion: 0,
     cues: [],
     offsetSec: 0,
     sourceLabel: "未読込",
@@ -220,6 +223,7 @@
     const el = document.createElement("div");
     el.className = "kls-subtitle-overlay kls-hidden" + (host.tagName === "YTMUSIC-PLAYER" ? " is-music" : "");
     el.setAttribute("data-kls-role", "overlay");
+    el.lang = "ja";
     host.appendChild(el);
     state.overlayEl = el;
     watchOverlaySize(host, el);
@@ -255,6 +259,7 @@
     const el = document.createElement("div");
     el.className = "kls-popover kls-hidden";
     el.setAttribute("data-kls-role", "popover");
+    el.lang = "ja";
     document.body.appendChild(el);
     state.popoverEl = el;
     return el;
@@ -290,6 +295,7 @@
     const el = document.createElement("aside");
     el.className = "kls-dock" + (isMusic || mountTarget === document.body ? " is-music-floating" : "");
     el.setAttribute("data-kls-role", "dock");
+    el.lang = "ja";
 
     if (mountTarget !== document.body && mountTarget.firstChild) {
       mountTarget.insertBefore(el, mountTarget.firstChild);
@@ -313,7 +319,7 @@
     overlay.classList.remove("kls-hidden");
     // timeupdate fires several times a second; rebuilding the buttons each time would
     // swap them out from under a click, so only rebuild when something visible changed.
-    const renderKey = [cue.start, cue.ko, cue.ja, state.settings.showTranslation, state.settings.showHanja, state.settings.readingMode, state.selectedWord, Object.keys(state.savedCards).length].join("|");
+    const renderKey = [cue.start, cue.ko, cue.ja, state.settings.showTranslation, state.settings.showHanja, state.settings.showGloss, state.glossVersion, state.settings.readingMode, state.selectedWord, Object.keys(state.savedCards).length].join("|");
     if (renderKey === state.overlayKey && overlay.firstChild) return;
     state.overlayKey = renderKey;
     const rows = Aligned.rowsForMode(state.settings.readingMode);
@@ -328,13 +334,13 @@
           "kls-word-btn" +
           (saved ? " is-saved" : "") +
           (active ? " is-active" : "");
-        return `<button type="button" class="${cls}" data-word="${escapeHtml(tok)}">${Aligned.renderWord(token, rows, hanjaRow)}</button>`;
+        return `<button type="button" class="${cls}" data-word="${escapeHtml(tok)}">${Aligned.renderWord(token, rows, hanjaRow, glossArg(token))}</button>`;
       })
       .join("");
 
-    const jaHtml = cue.ja && state.settings.showTranslation ? `<div class="kls-overlay-ja">${escapeHtml(cue.ja)}</div>` : "";
+    const jaHtml = cue.ja && state.settings.showTranslation ? `<div class="kls-overlay-ja" lang="ja">${escapeHtml(cue.ja)}</div>` : "";
 
-    overlay.innerHTML = `<div class="kls-overlay-ko">${wordButtons}</div>${jaHtml}`;
+    overlay.innerHTML = `<div class="kls-overlay-ko" lang="ko">${wordButtons}</div>${jaHtml}`;
     overlay.querySelectorAll(".kls-word-btn").forEach((btn) => {
       btn.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -545,6 +551,95 @@
     box.innerHTML = html;
   }
 
+  // ---- Word glosses: a short Japanese meaning under every word -------------------------
+  // Exact entries of the built-in dictionary first, machine translation of the word for the
+  // rest. Results are kept in storage so a song is translated only once.
+  const GLOSS_CACHE_MAX = 6000;
+  let glossCacheLoaded = null;
+
+  function shortMeaning(text) {
+    return String(text || "").split(/[、，,／/（(；;]/)[0].trim();
+  }
+
+  function glossOf(token) {
+    if (!token || !token.hasHangul) return "";
+    const clean = Dict.cleanHangulWord(token.surface);
+    if (!clean) return "";
+    if (state.glossMap[clean] === undefined) {
+      // Built-in dictionary entries are available right away; the rest come from fillGlosses.
+      const a = Dict.analyzeToken(clean);
+      if (a && a.matched !== false && a.lemma === clean && a.meaning) state.glossMap[clean] = shortMeaning(a.meaning);
+    }
+    return state.glossMap[clean] || "";
+  }
+
+  function glossArg(token) {
+    return state.settings.showGloss !== false ? glossOf(token) : undefined;
+  }
+
+  async function loadGlossCache() {
+    if (!glossCacheLoaded) {
+      glossCacheLoaded = storageGet(["glossCache"]).then((s) => (s && s.glossCache && typeof s.glossCache === "object" ? s.glossCache : {}));
+    }
+    return glossCacheLoaded;
+  }
+
+  async function fillGlosses(seq) {
+    if (state.settings.showGloss === false) return;
+    const words = [];
+    const seen = new Set();
+    for (const c of state.rawCues) {
+      for (const part of String(c.ko || "").split(/\s+/)) {
+        const clean = Dict.cleanHangulWord(part);
+        if (clean && !seen.has(clean)) {
+          seen.add(clean);
+          words.push(clean);
+        }
+      }
+    }
+    if (!words.length) return;
+    const cache = await loadGlossCache();
+    const missing = [];
+    for (const w of words) {
+      if (state.glossMap[w]) continue;
+      const a = Dict.analyzeToken(w);
+      if (a && a.matched !== false && a.lemma === w && a.meaning) {
+        state.glossMap[w] = shortMeaning(a.meaning);
+      } else if (cache[w]) {
+        state.glossMap[w] = cache[w];
+      } else {
+        missing.push(w);
+      }
+    }
+    const bump = () => {
+      state.glossVersion = (state.glossVersion || 0) + 1;
+      state.overlayKey = "";
+      renderDock();
+      syncToCurrentTime();
+    };
+    bump();
+    if (!missing.length) return;
+    // Long talk videos can hold a thousand distinct words; translate in slices so the panel
+    // fills in step by step instead of waiting for everything.
+    for (let i = 0; i < missing.length && i < 2000; i += 300) {
+      const slice = missing.slice(i, i + 300);
+      const res = await sendBg({ type: "kls:translate", lines: slice });
+      if (seq !== state.loadSeq) return;
+      if (!res || !Array.isArray(res.lines)) break;
+      slice.forEach((w, k) => {
+        const v = shortMeaning(res.lines[k]);
+        if (v) {
+          state.glossMap[w] = v;
+          cache[w] = v;
+        }
+      });
+      bump();
+    }
+    const keys = Object.keys(cache);
+    if (keys.length > GLOSS_CACHE_MAX) keys.slice(0, keys.length - GLOSS_CACHE_MAX).forEach((k) => delete cache[k]);
+    storageSet({ glossCache: cache });
+  }
+
   // Fill in Japanese for lines that have no translation (LRCLIB lyrics, pasted LRC).
   async function translateMissing(seq) {
     const targets = state.rawCues
@@ -583,6 +678,7 @@
       const el = document.createElement("div");
       el.className = "kls-launcher";
       el.setAttribute("data-kls-role", "launcher");
+      el.lang = "ja";
       document.body.appendChild(el);
       state.launcherEl = el;
     }
@@ -653,8 +749,8 @@
                   <span>${formatSec(c.start)}</span>
                   ${rep}
                 </div>
-                <div class="kls-line-ko">${Aligned.renderLine(c.ko, state.settings.readingMode, { ja: c.ja, hanja: state.settings.showHanja !== false })}</div>
-                ${c.ja && state.settings.showTranslation ? `<div class="kls-line-ja">${escapeHtml(c.ja)}</div>` : ""}
+                <div class="kls-line-ko" lang="ko">${Aligned.renderLine(c.ko, state.settings.readingMode, { ja: c.ja, hanja: state.settings.showHanja !== false, gloss: state.settings.showGloss !== false ? glossOf : null })}</div>
+                ${c.ja && state.settings.showTranslation ? `<div class="kls-line-ja" lang="ja">${escapeHtml(c.ja)}</div>` : ""}
               </button>
             `;
           })
@@ -688,6 +784,7 @@
         <button type="button" class="kls-btn is-active" data-act="reading">${ICONS.eye}<span>${escapeHtml(readLabel)}</span></button>
         <button type="button" class="kls-btn${state.settings.showOverlay ? " is-active" : ""}" data-act="overlay" aria-pressed="${state.settings.showOverlay ? "true" : "false"}">${ICONS.cc}<span>動画の字幕${state.settings.showOverlay ? "" : "(非表示)"}</span></button>
         <button type="button" class="kls-btn${state.settings.showHanja !== false ? " is-active" : ""}" data-act="hanja" aria-pressed="${state.settings.showHanja !== false ? "true" : "false"}">${ICONS.kanji}<span>漢字${state.settings.showHanja !== false ? "" : "(非表示)"}</span></button>
+        <button type="button" class="kls-btn${state.settings.showGloss !== false ? " is-active" : ""}" data-act="gloss" aria-pressed="${state.settings.showGloss !== false ? "true" : "false"}">${ICONS.cards}<span>単語訳${state.settings.showGloss !== false ? "" : "(非表示)"}</span></button>
         <button type="button" class="kls-btn${state.settings.showTranslation ? " is-active" : ""}" data-act="translation" aria-pressed="${state.settings.showTranslation ? "true" : "false"}">${ICONS.translate}<span>日本語訳${state.settings.showTranslation ? "" : "(非表示)"}</span></button>
         <button type="button" class="kls-btn${state.showLrcBox ? " is-active" : ""}" data-act="toggle-lrc">${ICONS.paste}<span>歌詞・LRC貼付</span></button>
         <button type="button" class="kls-btn" data-act="reload">${ICONS.refresh}<span>再取得</span></button>
@@ -744,6 +841,13 @@
       renderDock();
       syncToCurrentTime();
     };
+    dock.querySelector('[data-act="gloss"]').onclick = async () => {
+      state.settings.showGloss = state.settings.showGloss === false;
+      await storageSet({ settings: state.settings });
+      if (state.settings.showGloss) fillGlosses(state.loadSeq);
+      renderDock();
+      syncToCurrentTime();
+    };
     dock.querySelector('[data-act="hanja"]').onclick = async () => {
       state.settings.showHanja = state.settings.showHanja === false;
       await storageSet({ settings: state.settings });
@@ -796,6 +900,7 @@
         state.translationNote = "";
         applyCuesWithOffset();
         translateMissing(state.loadSeq);
+      fillGlosses(state.loadSeq);
       }
     };
     dock.querySelector('[data-act="reload"]').onclick = () => loadSubtitlesForMeta(true);
@@ -958,7 +1063,7 @@
       const timer = setTimeout(() => {
         delete state.captionWaiters[id];
         resolve(null);
-      }, 25000);
+      }, 90000);
       state.captionWaiters[id] = (data) => {
         clearTimeout(timer);
         delete state.captionWaiters[id];
@@ -980,7 +1085,10 @@
 
   async function loadSubtitlesForMeta(force = false) {
     if (!isActive()) return;
-    const key = `${state.meta.videoId}|${state.meta.title}`;
+    // Whether the track list was known is part of the key: the first page message can come
+    // before the player has its captions, and the later one must still load them.
+    const hasTracks = Array.isArray(state.meta.captionTracks) && state.meta.captionTracks.length > 0;
+    const key = `${state.meta.videoId}|${state.meta.title}|${hasTracks ? 1 : 0}`;
     if (!force && key === state.lastLoadedKey) return;
     state.lastLoadedKey = key;
     const seq = ++state.loadSeq;
@@ -1007,6 +1115,9 @@
       tracks.find((t) => String(t.languageCode).startsWith("ja") && t.kind !== "asr") ||
       tracks.find((t) => String(t.languageCode).startsWith("ja"));
 
+    let captionError = "";
+    // Regular YouTube: also ask the player when the track list was not in the page message yet.
+    const tryPlayer = Boolean(koTrack && koTrack.baseUrl) || (!state.meta.isMusic && !hasTracks);
     if (koTrack && koTrack.baseUrl) {
       const koResp = await sendBg({ type: "kls:fetch-caption", baseUrl: koTrack.baseUrl });
       if (stale()) return;
@@ -1033,15 +1144,26 @@
           state.sourceLabel = "YouTube字幕";
           applyCuesWithOffset();
           translateMissing(seq);
+          fillGlosses(seq);
           return;
         }
       }
-
-      // 1b. Direct download was refused: let the player fetch them.
-      state.sourceLabel = "字幕を取得中";
-      renderDock();
-      const viaPage = await requestPageCaptions(state.meta.videoId);
-      if (stale()) return;
+    }
+    if (tryPlayer) {
+      // 1b. Direct download was refused: let the player fetch them. Ads and a slow player can
+      // make one try fail, so try a few times before falling back to lyrics.
+      let viaPage = null;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        state.sourceLabel = attempt === 1 ? "字幕を取得中" : `字幕を取得中（再試行 ${attempt}/3）`;
+        renderDock();
+        viaPage = await requestPageCaptions(state.meta.videoId);
+        if (stale()) return;
+        if (viaPage && viaPage.ok && viaPage.ko) break;
+        if (!viaPage || !viaPage.retry) break;
+        await new Promise((r) => setTimeout(r, 2500));
+        if (stale()) return;
+      }
+      if (!(viaPage && viaPage.ok)) captionError = captionErrorLabel(viaPage);
       if (viaPage && viaPage.ok && viaPage.ko) {
         const merged = cuesFromCaptionPair(viaPage.ko, viaPage.ja);
         if (merged.length) {
@@ -1050,6 +1172,7 @@
           state.sourceLabel = "YouTube字幕";
           applyCuesWithOffset();
           translateMissing(seq);
+          fillGlosses(seq);
           return;
         }
       }
@@ -1079,13 +1202,25 @@
           state.sourceLabel = "LRCLIB 同期歌詞";
           applyCuesWithOffset();
           translateMissing(seq);
+          fillGlosses(seq);
           return;
         }
       }
     }
 
-    state.sourceLabel = "字幕未検出";
+    state.sourceLabel = captionError ? `字幕未検出（${captionError}）` : "字幕未検出";
     renderDock();
+  }
+
+  function captionErrorLabel(res) {
+    const e = String((res && res.error) || "timeout");
+    if (e === "no korean track") return "韓国語字幕なし";
+    if (e === "ad still playing") return "広告が終わらない";
+    if (e === "timeout") return "応答なし";
+    if (e === "korean captions empty") return "韓国語字幕が空";
+    if (e === "player has no korean track" || e === "player not ready" || e === "no player") return "プレーヤーの準備が終わらない";
+    if (e === "video changed") return "動画が切り替わった";
+    return e;
   }
 
   function handleKeydown(e) {

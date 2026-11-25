@@ -10,6 +10,38 @@
   --kls-success: #2f7d4d;
   --kls-warn: #a16207;
   --kls-hanja: #7e22ce;
+  /* Fonts are named explicitly: with only "Noto Sans KR/JP" (not installed on Windows) the
+     browser fell back to a Chinese font (Microsoft YaHei) for kanji and some hangul. */
+  --kls-font-ko: "Malgun Gothic", "맑은 고딕", "Apple SD Gothic Neo", "Noto Sans KR", "Noto Sans CJK KR", sans-serif;
+  --kls-font-ja: "Yu Gothic UI", "Yu Gothic", "Meiryo", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Noto Sans CJK JP", sans-serif;
+  --kls-font-ui: "Segoe UI", Inter, var(--kls-font-ja);
+}
+
+/* Base font for everything the extension puts on the page (Japanese UI). */
+.kls-subtitle-overlay,
+.kls-popover,
+.kls-dock,
+.kls-launcher {
+  font-family: var(--kls-font-ui);
+}
+
+/* Korean text (lyrics, pronunciation hangul, word headings) */
+.kls-subtitle-overlay [lang="ko"],
+.kls-popover [lang="ko"],
+.kls-dock [lang="ko"],
+.kls-al-ko,
+.kls-al-pron {
+  font-family: "Segoe UI", var(--kls-font-ko);
+}
+
+/* Japanese text (translations, kana, kanji) */
+.kls-subtitle-overlay [lang="ja"],
+.kls-popover [lang="ja"],
+.kls-dock [lang="ja"],
+.kls-al-kana,
+.kls-overlay-ja,
+.kls-line-ja {
+  font-family: "Segoe UI", var(--kls-font-ja);
 }
 
 html[dark],
@@ -42,7 +74,6 @@ ytd-app[dark] {
   border: 1px solid rgba(255, 255, 255, 0.14);
   color: #f5f6f7;
   text-align: center;
-  font-family: Inter, "Noto Sans KR", "Noto Sans JP", system-ui, sans-serif;
   pointer-events: auto;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);
 }
@@ -69,7 +100,7 @@ ytd-app[dark] {
   border: 1px solid rgba(255, 255, 255, 0.18);
   background: rgba(255, 255, 255, 0.08);
   color: #ffffff;
-  font: 700 18px/1.3 "Noto Sans KR", system-ui, sans-serif;
+  font: 700 18px/1.3 "Segoe UI", var(--kls-font-ko);
   padding: 2px 7px;
   border-radius: 5px;
   cursor: pointer;
@@ -109,7 +140,7 @@ ytd-app[dark] {
   border: 1px solid var(--kls-border);
   border-radius: 8px;
   padding: 12px;
-  font: 13px/1.5 Inter, "Noto Sans JP", "Noto Sans KR", system-ui, sans-serif;
+  font: 13px/1.5 var(--kls-font-ui);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
 }
 
@@ -199,7 +230,7 @@ ytd-app[dark] {
   border: 1px solid var(--kls-border);
   border-radius: 8px;
   margin-bottom: 12px;
-  font: 12.5px/1.45 Inter, "Noto Sans JP", "Noto Sans KR", system-ui, sans-serif;
+  font: 12.5px/1.45 var(--kls-font-ui);
   overflow: hidden;
 }
 
@@ -286,7 +317,7 @@ ytd-app[dark] {
   border: 1px solid var(--kls-border);
   background: var(--kls-bg);
   color: var(--kls-text);
-  font: 500 11.5px/1.2 Inter, "Noto Sans JP", system-ui, sans-serif;
+  font: 500 11.5px/1.2 var(--kls-font-ui);
   cursor: pointer;
 }
 
@@ -440,7 +471,7 @@ ytd-app[dark] {
 /* Kanji row above Sino-Korean words */
 .kls-al-hanja {
   white-space: nowrap;
-  font-family: "Yu Gothic UI", "Yu Gothic", "Meiryo", "Noto Sans JP", sans-serif;
+  font-family: var(--kls-font-ja);
   font-weight: 600;
 }
 
@@ -464,7 +495,7 @@ ytd-app[dark] {
 
 /* Overlay on the video */
 .kls-word-btn .kls-al-ko {
-  font: 700 18px/23px "Noto Sans KR", system-ui, sans-serif;
+  font: 700 18px/23px "Segoe UI", var(--kls-font-ko);
 }
 
 .kls-word-btn .kls-al-pron,
@@ -624,7 +655,7 @@ ytmusic-player .kls-subtitle-overlay {
 }
 
 .kls-subtitle-overlay .kls-word-btn .kls-al-ko {
-  font: 700 1em/1.28 "Noto Sans KR", system-ui, sans-serif;
+  font: 700 1em/1.28 "Segoe UI", var(--kls-font-ko);
 }
 
 .kls-subtitle-overlay .kls-word-btn .kls-al-pron,
@@ -755,7 +786,7 @@ ytmusic-player .kls-subtitle-overlay {
   background: var(--kls-bg);
   color: var(--kls-text);
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
-  font: 12px/1.4 Inter, "Noto Sans JP", "Noto Sans KR", system-ui, sans-serif;
+  font: 12px/1.4 var(--kls-font-ui);
 }
 
 .kls-launcher .kls-launcher-label {
@@ -772,4 +803,41 @@ ytmusic-player .kls-subtitle-overlay {
 
 .kls-launcher.kls-hidden {
   display: none !important;
+}
+
+/* Word glosses: short Japanese meaning under each word */
+.kls-al-glossed {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  vertical-align: top;
+}
+
+.kls-al-gloss {
+  display: block;
+  max-width: 8.5em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+  font-size: 11px;
+  line-height: 14px;
+  margin-top: 1px;
+  color: #ffd08a;
+}
+
+.kls-word-btn .kls-al-gloss {
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.kls-subtitle-overlay .kls-word-btn .kls-al-gloss {
+  font-size: 0.62em;
+  line-height: 1.3;
+}
+
+.kls-dock .kls-al-gloss {
+  font-size: 10.5px;
+  line-height: 13px;
+  color: var(--kls-warn);
 }

@@ -155,7 +155,7 @@ test("aligns readings 1:1 with each hangul syllable and leaves non-hangul runs b
   assert.deepEqual(Aligned.rowsForMode("hybrid"), ["kana", "roman"]);
   assert.deepEqual(Aligned.rowsForMode("off"), []);
   const html = Aligned.renderLine("같이", "hangul");
-  assert.match(html, /kls-al-pron is-changed">치</);
+  assert.match(html, /kls-al-pron is-changed" lang="ko">치</);
 });
 
 const Act = require("../lib/activation.js");
@@ -229,4 +229,18 @@ test("aligned: a line with kanji gets a kanji row in every column", () => {
   assert.ok(html2.includes(">記<") && html2.includes(">憶<"));
   const off = Aligned.renderLine("기억 속의 너", "hybrid", { ja: "記憶の中の君", hanja: false });
   assert.ok(!off.includes("kls-al-hanja"));
+});
+
+test("aligned: language attributes and optional word glosses", () => {
+  const Aligned = require("../lib/aligned.js");
+  const plain = Aligned.renderLine("사랑해 baby", "hybrid");
+  assert.ok(plain.includes('class="kls-al-ko" lang="ko"'));
+  assert.ok(plain.includes('class="kls-al-kana" lang="ja"'));
+  assert.ok(!plain.includes("kls-al-gloss"));
+  const glossed = Aligned.renderLine("사랑해 baby", "hybrid", { gloss: (t) => (t.surface === "사랑해" ? "愛してる" : "") });
+  assert.ok(glossed.includes('<span class="kls-al-gloss" lang="ja" title="愛してる">愛してる</span>'));
+  // Words without hangul get no gloss row.
+  assert.equal((glossed.match(/class="kls-al-gloss"/g) || []).length, 1);
+  const empty = Aligned.renderLine("나", "hybrid", { gloss: () => "" });
+  assert.ok(empty.includes('<span class="kls-al-gloss" lang="ja">&nbsp;</span>'));
 });

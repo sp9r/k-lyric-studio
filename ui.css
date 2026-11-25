@@ -13,7 +13,7 @@
   --ui-success: #2f7d4d;
   --ui-warn: #a16207;
   --ui-danger: #b91c1c;
-  --ui-font: Inter, "Noto Sans JP", "Noto Sans KR", system-ui, -apple-system, sans-serif;
+  --ui-font: "Segoe UI", Inter, "Yu Gothic UI", "Yu Gothic", "Meiryo", "Hiragino Sans", "Noto Sans JP", "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
   color-scheme: light;
 }
 

@@ -8,6 +8,7 @@
     showTranslation: true,
     showOverlay: true,
     showHanja: true,
+    showGloss: true,
     enableBridge: false,
     bridgeUrl: "http://127.0.0.1:8788"
   };
@@ -48,6 +49,7 @@
     document.getElementById("opt-reading").value = settings.readingMode || "hybrid";
     document.getElementById("opt-overlay").checked = settings.showOverlay !== false;
     document.getElementById("opt-hanja").checked = settings.showHanja !== false;
+  document.getElementById("opt-gloss").checked = settings.showGloss !== false;
     document.getElementById("opt-autopause").checked = Boolean(settings.autoPauseOnClick);
     document.getElementById("opt-shortcuts").checked = Boolean(settings.shortcutsEnabled);
     document.getElementById("opt-bridge").checked = Boolean(settings.enableBridge);
@@ -61,6 +63,7 @@
       readingMode: document.getElementById("opt-reading").value,
       showOverlay: document.getElementById("opt-overlay").checked,
       showHanja: document.getElementById("opt-hanja").checked,
+      showGloss: document.getElementById("opt-gloss").checked,
       autoPauseOnClick: document.getElementById("opt-autopause").checked,
       shortcutsEnabled: document.getElementById("opt-shortcuts").checked,
       enableBridge: document.getElementById("opt-bridge").checked,

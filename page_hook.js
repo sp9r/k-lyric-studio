@@ -268,7 +268,7 @@
       } catch (_) {
         return null;
       }
-    }, 3000)) || [];
+    }, 8000)) || [];
   }
 
   // Select a track in the player and wait for its response to come through.
@@ -285,10 +285,25 @@
   async function handleCaptionRequest(reqId, videoId) {
     const reply = (data) => window.postMessage({ source: "kls-page-captions", reqId, videoId, ...data }, "*");
     try {
-      const player = document.getElementById("movie_player");
-      const resp = player?.getPlayerResponse?.();
-      if (!player || typeof player.setOption !== "function") return reply({ ok: false, error: "no player" });
-      if (!resp || resp.videoDetails?.videoId !== videoId) return reply({ ok: false, error: "video changed" });
+      const player = await waitFor(() => {
+        const p = document.getElementById("movie_player");
+        return p && typeof p.setOption === "function" ? p : null;
+      }, 8000);
+      if (!player) return reply({ ok: false, error: "no player", retry: true });
+      // While an ad plays the captions module belongs to the ad; switching tracks then does
+      // nothing and the request used to give up. Wait for the video itself.
+      const adOver = await waitFor(() => !player.classList.contains("ad-showing"), 45000);
+      if (!adOver) return reply({ ok: false, error: "ad still playing", retry: true });
+      const currentId = () => {
+        try { return player.getVideoData?.()?.video_id || ""; } catch (_) { return ""; }
+      };
+      if (currentId() && currentId() !== videoId) return reply({ ok: false, error: "video changed" });
+      // The response (and its track list) can arrive a moment after the page changes.
+      const resp = await waitFor(() => {
+        const r = player.getPlayerResponse?.();
+        return r && r.videoDetails?.videoId === videoId ? r : null;
+      }, 8000) || player.getPlayerResponse?.();
+      if (!resp || resp.videoDetails?.videoId !== videoId) return reply({ ok: false, error: "player not ready", retry: true });
       const tracks = resp.captions?.playerCaptionsTracklistRenderer?.captionTracks || [];
       const pick = (list, lang) =>
         list.find((t) => String(t.languageCode).startsWith(lang) && t.kind !== "asr") ||
@@ -301,11 +316,11 @@
         const list = await playerTrackList(player);
         const koP = pick(list, "ko");
         const jaP = pick(list, "ja");
-        if (!koP) return { ok: false, error: "player has no korean track" };
+        if (!koP) return { ok: false, error: "player has no korean track", retry: true };
         let ko = await loadViaPlayer(player, videoId, koP);
         const captured = capturedTimedtext[videoId];
         if (!ko && captured) ko = await fetchJson3(signedUrl(koTrack.baseUrl, captured));
-        if (!ko) return { ok: false, error: "korean captions empty" };
+        if (!ko) return { ok: false, error: "korean captions empty", retry: true };
         let ja = null;
         if (captured) {
           ja = jaTrack
