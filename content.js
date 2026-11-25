@@ -2,6 +2,7 @@
   const Hangul = root.KLyricHangul;
   const Dict = root.KLyricDict;
   const SRS = root.KLyricSRS;
+  const Aligned = root.KLyricAligned;
 
   const READING_MODES = [
     { id: "hybrid", label: "併用(カナ+ローマ字)" },
@@ -36,6 +37,8 @@
     volume: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>`,
     bookmark: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>`,
     spark: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>`,
+    chevronDown: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>`,
+    chevronUp: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"></polyline></svg>`,
     close: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`
   };
 
@@ -124,7 +127,10 @@
     popoverEl: null,
     dockEl: null,
     videoEl: null,
-    lastLoadedKey: ""
+    lastLoadedKey: "",
+    loadSeq: 0,
+    overlayKey: "",
+    dockCollapsed: false
   };
 
   function getReadingLabel(modeId) {
@@ -167,9 +173,11 @@
   }
 
   function ensureOverlay() {
+    // YouTube Music: mount on <ytmusic-player> so the overlay sits above the album-art layer
+    // that covers #movie_player for audio-only tracks.
     const host =
+      (location.hostname === "music.youtube.com" && document.querySelector("ytmusic-player#player")) ||
       document.getElementById("movie_player") ||
-      document.querySelector("ytmusic-player-page #player") ||
       (state.videoEl ? state.videoEl.parentElement : null);
     if (!host) return null;
 
@@ -182,6 +190,7 @@
       return state.overlayEl;
     }
     if (state.overlayEl) state.overlayEl.remove();
+    state.overlayKey = "";
 
     const el = document.createElement("div");
     el.className = "kls-subtitle-overlay kls-hidden";
@@ -233,13 +242,20 @@
 
     if (!state.settings.enabled || !cue || !cue.ko) {
       overlay.classList.add("kls-hidden");
+      state.overlayKey = "";
       return;
     }
 
     overlay.classList.remove("kls-hidden");
-    const tokens = String(cue.ko).split(/\s+/).filter(Boolean);
-    const wordButtons = tokens
-      .map((tok) => {
+    // timeupdate fires several times a second; rebuilding the buttons each time would
+    // swap them out from under a click, so only rebuild when something visible changed.
+    const renderKey = [cue.start, cue.ko, cue.ja, state.settings.readingMode, state.selectedWord, Object.keys(state.savedCards).length].join("|");
+    if (renderKey === state.overlayKey && overlay.firstChild) return;
+    state.overlayKey = renderKey;
+    const rows = Aligned.rowsForMode(state.settings.readingMode);
+    const wordButtons = Hangul.alignReading(cue.ko)
+      .map((token) => {
+        const tok = token.surface;
         const clean = Dict.cleanHangulWord(tok);
         const saved = isWordSaved(clean);
         const active = clean && clean === state.selectedWord;
@@ -247,15 +263,13 @@
           "kls-word-btn" +
           (saved ? " is-saved" : "") +
           (active ? " is-active" : "");
-        return `<button type="button" class="${cls}" data-word="${escapeHtml(tok)}">${escapeHtml(tok)}</button>`;
+        return `<button type="button" class="${cls}" data-word="${escapeHtml(tok)}">${Aligned.renderWord(token, rows)}</button>`;
       })
       .join("");
 
-    const reading = Hangul.formatReading(cue.ko, state.settings.readingMode);
-    const readingHtml = reading ? `<div class="kls-overlay-reading">${escapeHtml(reading)}</div>` : "";
     const jaHtml = cue.ja ? `<div class="kls-overlay-ja">${escapeHtml(cue.ja)}</div>` : "";
 
-    overlay.innerHTML = `<div class="kls-overlay-ko">${wordButtons}</div>${readingHtml}${jaHtml}`;
+    overlay.innerHTML = `<div class="kls-overlay-ko">${wordButtons}</div>${jaHtml}`;
     overlay.querySelectorAll(".kls-word-btn").forEach((btn) => {
       btn.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -336,7 +350,8 @@
     pop.classList.remove("kls-hidden");
 
     const p = analysis.phonetics || Hangul.phoneticizeHangul(analysis.clean);
-    const readingAll = `[${p.pronouncedHangul}] · ${p.katakana} · ${p.romanized}`;
+    const wordToken = Hangul.alignReading(analysis.clean)[0];
+    const popRows = ["pron", "kana", "roman"];
     const rulesHtml = (p.appliedRules || [])
       .map((r) => `<span class="kls-badge is-accent">${escapeHtml(r)}</span>`)
       .join("");
@@ -345,8 +360,10 @@
     pop.innerHTML = `
       <div class="kls-pop-head">
         <div>
-          <div class="kls-pop-word">${escapeHtml(analysis.clean)}</div>
-          <div class="kls-pop-reading">${escapeHtml(readingAll)}</div>
+          <div class="kls-pop-aligned">
+            <span class="kls-pop-legend"><span>表記</span><span>発音</span><span>カナ</span><span>ローマ字</span></span>
+            ${wordToken ? Aligned.renderWord(wordToken, popRows) : escapeHtml(analysis.clean)}
+          </div>
           <div class="kls-pop-badges">
             <span class="kls-badge">${escapeHtml(analysis.pos)}</span>
             ${rulesHtml}
@@ -384,7 +401,7 @@
     `;
 
     // Position cleanly above the subtitle row when space allows, otherwise below
-    const popH = 270;
+    const popH = 300;
     const preferAbove = anchorRect && anchorRect.top > popH + 20;
     const top = preferAbove
       ? Math.max(12, anchorRect.top - popH - 10)
@@ -443,6 +460,7 @@
       return;
     }
     dock.classList.remove("kls-hidden");
+    dock.classList.toggle("is-collapsed", state.dockCollapsed);
 
     const cov = Dict.computeVocabularyStats(state.cues, state.savedCards);
     const speed = SPEED_STEPS[state.speedIdx];
@@ -452,7 +470,6 @@
       ? state.cues
           .map((c, idx) => {
             const cur = idx === state.activeCueIdx;
-            const read = Hangul.formatReading(c.ko, state.settings.readingMode);
             const rep = c.repeatTotal > 1 ? `<span class="kls-badge is-accent">${c.repeatIndex}/${c.repeatTotal}</span>` : "";
             return `
               <button type="button" class="kls-line-row${cur ? " is-current" : ""}" data-cue-idx="${idx}">
@@ -460,8 +477,7 @@
                   <span>${formatSec(c.start)}</span>
                   ${rep}
                 </div>
-                <div class="kls-line-ko">${escapeHtml(c.ko)}</div>
-                ${read ? `<div class="kls-line-read">${escapeHtml(read)}</div>` : ""}
+                <div class="kls-line-ko">${Aligned.renderLine(c.ko, state.settings.readingMode)}</div>
                 ${c.ja ? `<div class="kls-line-ja">${escapeHtml(c.ja)}</div>` : ""}
               </button>
             `;
@@ -472,7 +488,10 @@
     dock.innerHTML = `
       <div class="kls-dock-head">
         <div class="kls-brand">${ICONS.music}<span>K-Lyric Studio</span></div>
-        <span class="kls-status-text">${escapeHtml(state.sourceLabel)} ・ ${state.cues.length}行</span>
+        <span class="kls-dock-head-right">
+          <span class="kls-status-text">${escapeHtml(state.sourceLabel)} ・ ${state.cues.length}行</span>
+          <button type="button" class="kls-btn" data-act="collapse" aria-expanded="${state.dockCollapsed ? "false" : "true"}">${state.dockCollapsed ? ICONS.chevronUp : ICONS.chevronDown}<span>${state.dockCollapsed ? "広げる" : "たたむ"}</span></button>
+        </span>
       </div>
       <div class="kls-cov-wrap">
         <div class="kls-cov-row">
@@ -514,6 +533,11 @@
       </div>
     `;
 
+    dock.querySelector('[data-act="collapse"]').onclick = async () => {
+      state.dockCollapsed = !state.dockCollapsed;
+      await storageSet({ dockCollapsed: state.dockCollapsed });
+      renderDock();
+    };
     dock.querySelector('[data-act="loop"]').onclick = () => {
       if (state.loopCueIdx >= 0) {
         state.loopCueIdx = -1;
@@ -634,6 +658,12 @@
       renderOverlay(null);
       return;
     }
+    // While an ad plays, the <video> time belongs to the ad, not the song.
+    const playerEl = document.getElementById("movie_player");
+    if (playerEl && playerEl.classList.contains("ad-showing")) {
+      renderOverlay(null);
+      return;
+    }
     const t = v.currentTime;
 
     // 1-line loop enforcement
@@ -694,8 +724,21 @@
 
   async function loadSubtitlesForMeta(force = false) {
     const key = `${state.meta.videoId}|${state.meta.title}`;
-    if (!force && key && key === state.lastLoadedKey && state.cues.length) return;
+    if (!force && key === state.lastLoadedKey) return;
     state.lastLoadedKey = key;
+    const seq = ++state.loadSeq;
+    const stale = () => seq !== state.loadSeq;
+
+    // Clear the previous video's lines right away so they never show over the next song.
+    state.rawCues = [];
+    state.offsetSec = 0;
+    if (!state.meta.videoId) {
+      state.sourceLabel = "再生待ち";
+      applyCuesWithOffset();
+      return;
+    }
+    state.sourceLabel = "読込中";
+    applyCuesWithOffset();
 
     // 1. Try YouTube Korean caption track first
     const tracks = Array.isArray(state.meta.captionTracks) ? state.meta.captionTracks : [];
@@ -708,6 +751,7 @@
 
     if (koTrack && koTrack.baseUrl) {
       const koResp = await sendBg({ type: "kls:fetch-caption", baseUrl: koTrack.baseUrl });
+      if (stale()) return;
       if (koResp && koResp.ok && koResp.json3) {
         const koCues = Hangul.parseYouTubeJson3(koResp.json3);
         let jaCues = [];
@@ -723,6 +767,7 @@
             jaCues = Hangul.parseYouTubeJson3(trResp.json3);
           }
         }
+        if (stale()) return;
         const merged = Hangul.mergeDualSubtitles(koCues, jaCues);
         if (merged.length) {
           state.rawCues = merged;
@@ -735,10 +780,16 @@
     }
 
     // 2. Try LRCLIB synced lyrics using cleaned title & author
-    const query = Hangul.cleanTrackQuery(state.meta.title, state.meta.author);
-    if (query) {
+    // The channel name helps for "Topic" channels but hurts for label channels (HYBE LABELS etc.),
+    // so fall back to the title alone.
+    const queries = [
+      Hangul.cleanTrackQuery(state.meta.title, state.meta.author),
+      Hangul.cleanTrackQuery(state.meta.title, "")
+    ].filter((q, i, arr) => q && arr.indexOf(q) === i);
+    for (const query of queries) {
       const dur = state.videoEl && state.videoEl.duration ? state.videoEl.duration : 0;
       const lrcResp = await sendBg({ type: "kls:fetch-lrclib", query, duration: dur });
+      if (stale()) return;
       if (lrcResp && lrcResp.ok && lrcResp.syncedLyrics) {
         const parsed = Hangul.parseLrc(lrcResp.syncedLyrics);
         if (parsed.length) {
@@ -782,7 +833,8 @@
   }
 
   async function init(initialMeta) {
-    const stored = await storageGet(["settings", "savedCards"]);
+    const stored = await storageGet(["settings", "savedCards", "dockCollapsed"]);
+    state.dockCollapsed = Boolean(stored.dockCollapsed);
     if (stored.settings) state.settings = { ...DEFAULT_SETTINGS, ...stored.settings };
     if (stored.savedCards && typeof stored.savedCards === "object") state.savedCards = stored.savedCards;
     if (initialMeta) state.meta = { ...state.meta, ...initialMeta };

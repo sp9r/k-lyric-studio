@@ -105,10 +105,23 @@
     document.getElementById("card-surface").textContent = item.surface;
     document.getElementById("card-context").textContent = item.context || "";
     document.getElementById("card-answer").classList.toggle("kls-hidden", !state.revealed);
-    document.getElementById("card-reading").textContent = SRS.formatReadingAll(item);
+    renderAlignedReading(document.getElementById("card-reading"), item);
     document.getElementById("card-meaning").textContent = item.meaning || "";
     document.getElementById("card-morph").textContent = `基本形: ${item.lemma || item.surface}${item.endingLabel ? ` ・ ${item.endingLabel} (${item.endingMeaning})` : ""}`;
     document.getElementById("card-ja-ctx").textContent = item.jaContext ? `文脈訳: ${item.jaContext}` : "";
+  }
+
+  // Pronounced hangul, katakana, and romanization on separate rows, each under its syllable.
+  function alignedReadingHtml(card) {
+    const Aligned = window.KLyricAligned;
+    const Hangul = window.KLyricHangul;
+    const token = Aligned && Hangul ? Hangul.alignReading(card.surface || "")[0] : null;
+    if (!token) return Aligned ? Aligned.escapeHtml(SRS.formatReadingAll(card)) : "";
+    return Aligned.renderWord(token, ["pron", "kana", "roman"]);
+  }
+
+  function renderAlignedReading(el, card) {
+    el.innerHTML = `<span class="kls-card-aligned">${alignedReadingHtml(card)}</span>`;
   }
 
   function renderClozePane() {
@@ -176,7 +189,7 @@
             <span class="kls-badge">${c.lemma || c.surface}</span>
             ${c.mastered ? `<span class="kls-badge is-success">習得済み</span>` : `<span class="kls-badge is-accent">学習中</span>`}
           </div>
-          <div class="kls-muted" style="color:var(--ui-accent);">${SRS.formatReadingAll(c)}</div>
+          <div class="kls-card-aligned">${alignedReadingHtml(c)}</div>
           <div>${c.meaning || ""}</div>
           <div class="kls-muted">${c.sourceTitle || ""} · ${formatSec(c.timestampSec)}</div>
         </div>

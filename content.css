@@ -57,6 +57,7 @@ ytd-app[dark] {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
+  align-items: flex-start;
   gap: 5px;
   margin-bottom: 3px;
 }
@@ -396,4 +397,182 @@ ytd-app[dark] {
   color: var(--kls-text);
   font: 12px/1.4 monospace;
   resize: vertical;
+}
+
+/* Syllable-aligned readings: each reading row sits directly under its hangul syllable */
+.kls-al-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 4px 10px;
+}
+
+.kls-al-word {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 3px;
+}
+
+.kls-al-col {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.kls-al-ko {
+  white-space: nowrap;
+}
+
+.kls-al-pron,
+.kls-al-kana,
+.kls-al-roman {
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.kls-al-roman {
+  font-family: "Segoe UI", Inter, system-ui, sans-serif;
+  letter-spacing: 0.01em;
+}
+
+/* Overlay on the video */
+.kls-word-btn .kls-al-ko {
+  font: 700 18px/23px "Noto Sans KR", system-ui, sans-serif;
+}
+
+.kls-word-btn .kls-al-pron,
+.kls-word-btn .kls-al-kana,
+.kls-word-btn .kls-al-roman {
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.kls-word-btn .kls-al-kana,
+.kls-word-btn .kls-al-pron {
+  color: #a9c6eb;
+}
+
+.kls-word-btn .kls-al-roman {
+  color: #c4ccd6;
+}
+
+.kls-al-pron.is-changed {
+  color: #f0b54a !important;
+  font-weight: 700;
+}
+
+/* Lines in the dock */
+.kls-dock .kls-line-ko .kls-al-ko {
+  font-size: 14px;
+  line-height: 19px;
+  font-weight: 600;
+}
+
+.kls-dock .kls-al-pron,
+.kls-dock .kls-al-kana,
+.kls-dock .kls-al-roman {
+  font-size: 10.5px;
+  line-height: 14px;
+}
+
+.kls-dock .kls-al-kana,
+.kls-dock .kls-al-pron {
+  color: var(--kls-accent);
+}
+
+.kls-dock .kls-al-roman {
+  color: var(--kls-muted);
+}
+
+.kls-dock .kls-al-pron.is-changed {
+  color: var(--kls-warn) !important;
+}
+
+/* Word popover: a legend column lines up with each row */
+.kls-pop-aligned {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.kls-pop-legend {
+  display: inline-flex;
+  flex-direction: column;
+  color: var(--kls-muted);
+  font-size: 10.5px;
+  text-align: right;
+}
+
+.kls-pop-legend span {
+  line-height: 18px;
+}
+
+.kls-pop-legend span:first-child {
+  line-height: 28px;
+}
+
+.kls-pop-aligned .kls-al-ko {
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 700;
+}
+
+.kls-pop-aligned .kls-al-pron,
+.kls-pop-aligned .kls-al-kana,
+.kls-pop-aligned .kls-al-roman {
+  font-size: 12.5px;
+  line-height: 18px;
+}
+
+.kls-pop-aligned .kls-al-kana,
+.kls-pop-aligned .kls-al-pron {
+  color: var(--kls-accent);
+  font-weight: 600;
+}
+
+.kls-pop-aligned .kls-al-roman {
+  color: var(--kls-muted);
+}
+
+.kls-popover .kls-al-pron.is-changed {
+  color: var(--kls-warn) !important;
+}
+
+.kls-pop-aligned .kls-al-word {
+  gap: 6px;
+}
+
+/* Collapsible dock */
+.kls-dock-head-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.kls-dock.is-collapsed > :not(.kls-dock-head) {
+  display: none !important;
+}
+
+.kls-dock.is-collapsed .kls-dock-head {
+  border-bottom: 0;
+}
+
+/* YouTube Music: the player element holds the album art; keep the overlay above it */
+ytmusic-player .kls-subtitle-overlay {
+  z-index: 100;
+  bottom: 24px;
+}
+
+/* Keep word boundaries visible in the dock now that syllables are spaced apart */
+.kls-dock .kls-al-word {
+  padding: 1px 3px;
+  border-radius: 4px;
+  background: var(--kls-subtle);
+}
+
+.kls-dock .kls-al-word.is-plain {
+  background: transparent;
+  padding-left: 0;
+  padding-right: 0;
 }

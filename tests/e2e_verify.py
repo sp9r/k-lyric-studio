@@ -42,15 +42,28 @@ def run_e2e() -> None:
 
             page.goto(f"{base}/tests/mock_youtube.html", wait_until="networkidle")
             page.wait_for_selector(".kls-subtitle-overlay:not(.kls-hidden)")
-            reading_txt = page.locator(".kls-overlay-reading").inner_text()
-            assert "ソルレジャナ" in reading_txt and "seol-le-ja-na" in reading_txt, f"Unexpected reading text: {reading_txt}"
+            # Each syllable column holds hangul / katakana / romanization on separate rows.
+            cols = page.evaluate("""() => [...document.querySelectorAll('.kls-word-btn[data-word="설레잖아"] .kls-al-col')].map(c => {
+                const r = c.querySelector('.kls-al-ko').getBoundingClientRect();
+                const k = c.querySelector('.kls-al-kana').getBoundingClientRect();
+                const m = c.querySelector('.kls-al-roman').getBoundingClientRect();
+                return { ko: c.querySelector('.kls-al-ko').textContent, kana: c.querySelector('.kls-al-kana').textContent,
+                         roman: c.querySelector('.kls-al-roman').textContent,
+                         centerDiff: Math.max(Math.abs((r.left + r.right) / 2 - (k.left + k.right) / 2), Math.abs((r.left + r.right) / 2 - (m.left + m.right) / 2)),
+                         stacked: r.bottom <= k.top + 1 && k.bottom <= m.top + 1 };
+            })""")
+            assert [c["ko"] for c in cols] == ["설", "레", "잖", "아"], cols
+            assert "".join(c["kana"] for c in cols) == "ソルレジャナ", cols
+            assert "-".join(c["roman"] for c in cols) == "seol-le-ja-na", cols
+            assert all(c["stacked"] and c["centerDiff"] < 1 for c in cols), f"Readings not stacked/centered under syllables: {cols}"
 
             # Click word to open analysis popover and save card
             page.locator('.kls-word-btn[data-word="설레잖아"]').click()
             page.wait_for_selector(".kls-popover:not(.kls-hidden)")
             pop_txt = page.locator(".kls-popover").inner_text()
             assert "설레다" in pop_txt and "-잖아" in pop_txt, f"Missing lemma/ending in popover: {pop_txt}"
-            assert "[설레자나]" in pop_txt and "seol-le-ja-na" in pop_txt, f"Missing 3-form reading: {pop_txt}"
+            pop_rows = page.evaluate("""() => ['pron', 'kana', 'roman'].map(r => [...document.querySelectorAll('.kls-popover .kls-al-' + r)].map(e => e.textContent).join(r === 'roman' ? '-' : ''))""")
+            assert pop_rows == ["설레자나", "ソルレジャナ", "seol-le-ja-na"], f"Missing 3-form reading: {pop_rows}"
 
             page.locator('[data-pop="save"]').click()
             assert "保存しました" in page.locator('[data-pop="save"]').inner_text()

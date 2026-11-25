@@ -72,7 +72,7 @@ test("parses LRC, YouTube JSON3, merges dual subtitles, and applies offset", () 
   assert.equal(merged[0].ko, "우리 같이 가자");
   assert.equal(merged[0].ja, "私たち一緒に行こう");
 
-  assert.equal(Hangul.cleanTrackQuery("ILLIT (아일릿) 'Magnetic' Official MV", "HYBE LABELS"), "HYBE LABELS ILLIT (아일릿) 'Magnetic'");
+  assert.equal(Hangul.cleanTrackQuery("ILLIT (아일릿) 'Magnetic' Official MV", "HYBE LABELS"), "HYBE LABELS ILLIT Magnetic");
 });
 
 test("analyzes Korean inflections, irregular stems, particles, and coverage stats", () => {
@@ -133,4 +133,27 @@ test("handles SM-2 SRS grading, cloze quiz, answer matching, and TSV roundtrip",
   const parsed = SRS.parseImportText(tsv);
   assert.equal(parsed.length, 3);
   assert.equal(parsed[0].surface, deck[0].surface);
+});
+
+test("aligns readings 1:1 with each hangul syllable and leaves non-hangul runs blank", () => {
+  require("../lib/aligned.js");
+  const Aligned = globalThis.KLyricAligned;
+  const tokens = Hangul.alignReading("같이 lub-dub 뭐지?");
+  assert.equal(tokens.length, 3);
+  assert.deepEqual(
+    tokens[0].units.map((u) => [u.surface, u.pron, u.kana, u.roman]),
+    [["같", "가", "カ", "ga"], ["이", "치", "チ", "chi"]]
+  );
+  assert.equal(tokens[1].hasHangul, false);
+  assert.equal(tokens[1].units[0].kana, "");
+  assert.deepEqual(tokens[2].units.map((u) => u.surface), ["뭐", "지", "?"]);
+  // Joined per-syllable readings must equal the whole-word readings.
+  const p = Hangul.phoneticizeHangul("설레잖아");
+  const units = Hangul.alignReading("설레잖아")[0].units;
+  assert.equal(units.map((u) => u.kana).join(""), p.katakana);
+  assert.equal(units.map((u) => u.roman).join("-"), p.romanized);
+  assert.deepEqual(Aligned.rowsForMode("hybrid"), ["kana", "roman"]);
+  assert.deepEqual(Aligned.rowsForMode("off"), []);
+  const html = Aligned.renderLine("같이", "hangul");
+  assert.match(html, /kls-al-pron is-changed">치</);
 });

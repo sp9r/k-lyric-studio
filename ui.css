@@ -273,3 +273,46 @@ body {
     min-height: 40px;
   }
 }
+
+/* Syllable-aligned readings (same structure as content.css) */
+.kls-card-aligned .kls-al-word {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.kls-card-aligned .kls-al-col {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.kls-card-aligned .kls-al-ko {
+  font-size: 18px;
+  line-height: 24px;
+  font-weight: 700;
+  color: var(--ui-text, inherit);
+}
+
+.kls-card-aligned .kls-al-pron,
+.kls-card-aligned .kls-al-kana,
+.kls-card-aligned .kls-al-roman {
+  white-space: nowrap;
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.kls-card-aligned .kls-al-pron,
+.kls-card-aligned .kls-al-kana {
+  color: var(--ui-accent);
+  font-weight: 600;
+}
+
+.kls-card-aligned .kls-al-roman {
+  color: var(--ui-muted, #646c77);
+  font-weight: 500;
+}
+
+.kls-card-aligned .kls-al-pron.is-changed {
+  color: #a16207;
+}
