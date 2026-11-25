@@ -21,6 +21,7 @@
     shortcutsEnabled: true,
     showTranslation: true,
     showOverlay: true,
+    showHanja: true,
     enableBridge: false,
     bridgeUrl: "http://127.0.0.1:8788"
   };
@@ -42,6 +43,7 @@
     spark: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>`,
     chevronDown: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>`,
     chevronUp: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"></polyline></svg>`,
+    kanji: `<svg viewBox="0 0 24 24"><text x="12" y="18" text-anchor="middle" font-size="17" font-weight="700" fill="currentColor" font-family="'Yu Gothic','Meiryo',sans-serif">漢</text></svg>`,
     translate: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h8"></path><path d="M8 3v2"></path><path d="M5 9c1.5 3 4 5 7 6"></path><path d="M11 5c-1 4-3.5 7-7 9"></path><path d="M13 21l4-9 4 9"></path><path d="M14.5 18h5"></path></svg>`,
     cc: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"></rect><path d="M10 10.5a2 2 0 1 0 0 3"></path><path d="M17 10.5a2 2 0 1 0 0 3"></path></svg>`,
     plus: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>`,
@@ -311,11 +313,12 @@
     overlay.classList.remove("kls-hidden");
     // timeupdate fires several times a second; rebuilding the buttons each time would
     // swap them out from under a click, so only rebuild when something visible changed.
-    const renderKey = [cue.start, cue.ko, cue.ja, state.settings.showTranslation, state.settings.readingMode, state.selectedWord, Object.keys(state.savedCards).length].join("|");
+    const renderKey = [cue.start, cue.ko, cue.ja, state.settings.showTranslation, state.settings.showHanja, state.settings.readingMode, state.selectedWord, Object.keys(state.savedCards).length].join("|");
     if (renderKey === state.overlayKey && overlay.firstChild) return;
     state.overlayKey = renderKey;
     const rows = Aligned.rowsForMode(state.settings.readingMode);
-    const wordButtons = Hangul.alignReading(cue.ko)
+    const { tokens, hanjaRow } = Aligned.lineTokens(cue.ko, cue.ja, state.settings.showHanja !== false);
+    const wordButtons = tokens
       .map((token) => {
         const tok = token.surface;
         const clean = Dict.cleanHangulWord(tok);
@@ -325,7 +328,7 @@
           "kls-word-btn" +
           (saved ? " is-saved" : "") +
           (active ? " is-active" : "");
-        return `<button type="button" class="${cls}" data-word="${escapeHtml(tok)}">${Aligned.renderWord(token, rows)}</button>`;
+        return `<button type="button" class="${cls}" data-word="${escapeHtml(tok)}">${Aligned.renderWord(token, rows, hanjaRow)}</button>`;
       })
       .join("");
 
@@ -413,6 +416,9 @@
 
     const p = analysis.phonetics || Hangul.phoneticizeHangul(analysis.clean);
     const wordToken = Hangul.alignReading(analysis.clean)[0];
+    const popHanja = Boolean(
+      wordToken && state.settings.showHanja !== false && cue && cue.ja && root.KLyricHanja && root.KLyricHanja.annotate([wordToken], cue.ja) > 0
+    );
     const popRows = ["pron", "kana", "roman"];
     const rulesHtml = (p.appliedRules || [])
       .map((r) => `<span class="kls-badge is-accent">${escapeHtml(r)}</span>`)
@@ -425,8 +431,8 @@
       <div class="kls-pop-head">
         <div>
           <div class="kls-pop-aligned">
-            <span class="kls-pop-legend"><span>表記</span><span>発音</span><span>カナ</span><span>ローマ字</span></span>
-            ${wordToken ? Aligned.renderWord(wordToken, popRows) : escapeHtml(analysis.clean)}
+            <span class="kls-pop-legend">${popHanja ? "<span>漢字</span>" : ""}<span class="is-ko">表記</span><span>発音</span><span>カナ</span><span>ローマ字</span></span>
+            ${wordToken ? Aligned.renderWord(wordToken, popRows, popHanja) : escapeHtml(analysis.clean)}
           </div>
           <div class="kls-pop-badges">
             <span class="kls-badge">${escapeHtml(analysis.pos)}</span>
@@ -647,7 +653,7 @@
                   <span>${formatSec(c.start)}</span>
                   ${rep}
                 </div>
-                <div class="kls-line-ko">${Aligned.renderLine(c.ko, state.settings.readingMode)}</div>
+                <div class="kls-line-ko">${Aligned.renderLine(c.ko, state.settings.readingMode, { ja: c.ja, hanja: state.settings.showHanja !== false })}</div>
                 ${c.ja && state.settings.showTranslation ? `<div class="kls-line-ja">${escapeHtml(c.ja)}</div>` : ""}
               </button>
             `;
@@ -681,6 +687,7 @@
         <button type="button" class="kls-btn" data-act="speed">${ICONS.speed}<span>速度 ${speed.toFixed(2).replace(/\.00$/, ".0")}x</span></button>
         <button type="button" class="kls-btn is-active" data-act="reading">${ICONS.eye}<span>${escapeHtml(readLabel)}</span></button>
         <button type="button" class="kls-btn${state.settings.showOverlay ? " is-active" : ""}" data-act="overlay" aria-pressed="${state.settings.showOverlay ? "true" : "false"}">${ICONS.cc}<span>動画の字幕${state.settings.showOverlay ? "" : "(非表示)"}</span></button>
+        <button type="button" class="kls-btn${state.settings.showHanja !== false ? " is-active" : ""}" data-act="hanja" aria-pressed="${state.settings.showHanja !== false ? "true" : "false"}">${ICONS.kanji}<span>漢字${state.settings.showHanja !== false ? "" : "(非表示)"}</span></button>
         <button type="button" class="kls-btn${state.settings.showTranslation ? " is-active" : ""}" data-act="translation" aria-pressed="${state.settings.showTranslation ? "true" : "false"}">${ICONS.translate}<span>日本語訳${state.settings.showTranslation ? "" : "(非表示)"}</span></button>
         <button type="button" class="kls-btn${state.showLrcBox ? " is-active" : ""}" data-act="toggle-lrc">${ICONS.paste}<span>歌詞・LRC貼付</span></button>
         <button type="button" class="kls-btn" data-act="reload">${ICONS.refresh}<span>再取得</span></button>
@@ -733,6 +740,12 @@
       const idx = READING_MODES.findIndex((m) => m.id === state.settings.readingMode);
       const next = READING_MODES[(idx + 1) % READING_MODES.length].id;
       state.settings.readingMode = next;
+      await storageSet({ settings: state.settings });
+      renderDock();
+      syncToCurrentTime();
+    };
+    dock.querySelector('[data-act="hanja"]').onclick = async () => {
+      state.settings.showHanja = state.settings.showHanja === false;
       await storageSet({ settings: state.settings });
       renderDock();
       syncToCurrentTime();

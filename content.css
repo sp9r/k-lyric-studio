@@ -9,6 +9,7 @@
   --kls-accent: #3d6391;
   --kls-success: #2f7d4d;
   --kls-warn: #a16207;
+  --kls-hanja: #7e22ce;
 }
 
 html[dark],
@@ -24,6 +25,7 @@ ytd-app[dark] {
   --kls-accent: #7aa4d6;
   --kls-success: #6db586;
   --kls-warn: #eab308;
+  --kls-hanja: #c9a2f2;
 }
 
 /* Video Subtitle Overlay */
@@ -435,6 +437,31 @@ ytd-app[dark] {
   letter-spacing: 0.01em;
 }
 
+/* Kanji row above Sino-Korean words */
+.kls-al-hanja {
+  white-space: nowrap;
+  font-family: "Yu Gothic UI", "Yu Gothic", "Meiryo", "Noto Sans JP", sans-serif;
+  font-weight: 600;
+}
+
+.kls-word-btn .kls-al-hanja {
+  font-size: 13px;
+  line-height: 16px;
+  color: #d8b8ff;
+}
+
+.kls-dock .kls-al-hanja {
+  font-size: 10.5px;
+  line-height: 14px;
+  color: var(--kls-hanja);
+}
+
+.kls-pop-aligned .kls-al-hanja {
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--kls-hanja);
+}
+
 /* Overlay on the video */
 .kls-word-btn .kls-al-ko {
   font: 700 18px/23px "Noto Sans KR", system-ui, sans-serif;
@@ -507,7 +534,7 @@ ytd-app[dark] {
   line-height: 18px;
 }
 
-.kls-pop-legend span:first-child {
+.kls-pop-legend span.is-ko {
   line-height: 28px;
 }
 

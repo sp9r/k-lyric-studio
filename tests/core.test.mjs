@@ -192,3 +192,41 @@ test("activation: allow / block this channel on YouTube", () => {
   act = Act.removeRule(act, "youtube", "block", 0);
   assert.equal(Act.evaluate(act, vid).active, true);
 });
+
+test("hanja: kanji come from the Japanese translation and must match the readings", () => {
+  require("../lib/hanja_readings.js");
+  const Hanja = require("../lib/hanja.js");
+  const kanjiOf = (ko, ja) => {
+    const tokens = Hangul.alignReading(ko);
+    Hanja.annotate(tokens, ja);
+    return tokens.map((t) => t.units.map((u) => u.hanja || "・").join(""));
+  };
+  // 運命 = 운명, 瞬間 = 순간, particles stay without kanji
+  assert.deepEqual(kanjiOf("운명처럼 이 순간을", "運命のようにこの瞬間を"), ["運命・・", "・", "瞬間・"]);
+  // Word-initial sound change: 恋 is 련, read 연 at the start of a word; 練 련 -> 연습
+  assert.deepEqual(kanjiOf("연애 연습", "恋愛の練習"), ["恋愛", "練習"]);
+  // 来日 (내일 = 래일) and 理由 (이유 = 리유)
+  assert.deepEqual(kanjiOf("내일 이유", "明日の理由"), ["・・", "理由"]);
+  // Native words get nothing even if a rare hanja word exists for them (사랑 / 舍廊)
+  assert.deepEqual(kanjiOf("사랑해 우리", "愛してる私たち"), ["・・・", "・・"]);
+  // 해 of 직진해 is 하다, not 海, even when the translation says 直進海
+  assert.deepEqual(kanjiOf("직진해", "直進海"), ["直進・"]);
+  // No translation, no kanji; a kanji word read differently is not used
+  assert.deepEqual(kanjiOf("시간", ""), ["・・"]);
+  assert.deepEqual(kanjiOf("시간", "時刻"), ["・・"]);
+});
+
+test("aligned: a line with kanji gets a kanji row in every column", () => {
+  require("../lib/hanja_readings.js");
+  require("../lib/hanja.js");
+  delete require.cache[require.resolve("../lib/aligned.js")];
+  const Aligned = require("../lib/aligned.js");
+  const html = Aligned.renderLine("세상 너와 나", "hybrid", { ja: "世界と君と私", hanja: true });
+  // 세상 is 世上 in Korean; the translation says 世界, so no kanji and no kanji row
+  assert.ok(!html.includes("kls-al-hanja"));
+  const html2 = Aligned.renderLine("기억 속의 너", "hybrid", { ja: "記憶の中の君", hanja: true });
+  assert.equal((html2.match(/kls-al-hanja/g) || []).length, 5, "every syllable column has the row");
+  assert.ok(html2.includes(">記<") && html2.includes(">憶<"));
+  const off = Aligned.renderLine("기억 속의 너", "hybrid", { ja: "記憶の中の君", hanja: false });
+  assert.ok(!off.includes("kls-al-hanja"));
+});
