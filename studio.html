@@ -26,6 +26,10 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
           <span>単語一覧・管理</span>
         </button>
+        <button data-stab="freq" type="button" class="kls-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+          <span>頻出単語帳</span>
+        </button>
         <a href="options.html" class="kls-btn">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.6.77 1 1.51 1H21a2 2 0 1 1 0 4h-.09c-.74 0-1.25.4-1.51 1z"></path></svg>
           <span>設定</span>
@@ -63,6 +67,7 @@
       <div class="kls-card-box" style="text-align:center;display:grid;gap:8px;">
         <div id="card-surface" style="font-size:28px;font-weight:700;"></div>
         <div id="card-context" class="kls-muted" style="font-size:14px;"></div>
+        <div id="card-occurrences"></div>
         <div id="card-answer" class="kls-hidden" style="border-top:1px solid var(--ui-border);padding-top:10px;display:grid;gap:4px;">
           <div id="card-reading" style="font-size:14px;font-weight:600;color:var(--ui-accent);"></div>
           <div id="card-meaning" style="font-size:16px;font-weight:700;"></div>
@@ -169,12 +174,56 @@
         </div>
       </div>
     </section>
+
+    <!-- 4. Frequent vocabulary log view -->
+    <section id="pane-freq" class="kls-section kls-hidden" style="display:grid;gap:12px;">
+      <div class="kls-row">
+        <div>
+          <div class="kls-title" style="margin:0;">動画から記録した韓国語 頻出単語帳</div>
+          <div id="freq-summary" class="kls-muted">記録動画 0本 / 記録単語 0語 / 未登録 0語（YouTube字幕ON・YouTube Music非ブラックリストの韓国語のみ、同一動画は重複除外）</div>
+        </div>
+        <div class="kls-seg">
+          <button id="btn-freq-add10" type="button" class="kls-btn is-primary">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            <span>上位10語を覚えるリストへ追加</span>
+          </button>
+          <button id="btn-freq-translate" type="button" class="kls-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 8l6 6"></path><path d="M4 14l6-6 2-3"></path><path d="M2 5h12"></path><path d="M7 2h1"></path><path d="M22 22l-5-10-5 10"></path><path d="M14 18h6"></path></svg>
+            <span>未訳の単語を訳す</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="kls-row">
+        <input id="freq-search" type="text" class="kls-input" style="flex:1;min-width:200px;" placeholder="ハングル・読み・意味・動画タイトルで検索" />
+        <select id="freq-sort" class="kls-select" style="width:auto;">
+          <option value="videos">出現動画数が多い順</option>
+          <option value="total">総出現回数が多い順</option>
+          <option value="recent">最近見た順</option>
+        </select>
+        <select id="freq-filter" class="kls-select" style="width:auto;">
+          <option value="all">すべて</option>
+          <option value="unlearned">未登録（覚える候補）</option>
+          <option value="saved">覚えるリスト登録済み</option>
+          <option value="mastered">習得済み</option>
+        </select>
+      </div>
+
+      <div id="freq-status" class="kls-muted"></div>
+      <div id="freq-word-list" class="kls-word-list"></div>
+
+      <details class="kls-card-box">
+        <summary style="cursor:pointer;font-weight:600;">記録済みの動画一覧（重複カウント防止リスト）</summary>
+        <div id="freq-video-list" class="kls-word-list" style="margin-top:10px;"></div>
+      </details>
+    </section>
   </main>
 
   <script src="lib/hangul.js"></script>
   <script src="lib/aligned.js"></script>
   <script src="lib/dictionary.js"></script>
   <script src="lib/srs.js"></script>
+  <script src="lib/vocab_log.js"></script>
   <script src="studio.js"></script>
 </body>
 </html>

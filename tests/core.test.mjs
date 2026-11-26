@@ -244,3 +244,111 @@ test("aligned: language attributes and optional word glosses", () => {
   const empty = Aligned.renderLine("나", "hybrid", { gloss: () => "" });
   assert.ok(empty.includes('<span class="kls-al-gloss" lang="ja">&nbsp;</span>'));
 });
+
+const VocabLog = require("../lib/vocab_log.js");
+
+test("vocab_log: records Korean words once per videoId, ignores English-only and inactive YouTube, preserves multi-video timestamps", () => {
+  let store = VocabLog.normalizeStore(null);
+
+  // YouTube without active/subtitles is rejected
+  assert.equal(
+    VocabLog.shouldRecord(
+      { active: false },
+      { enabled: true },
+      { isMusic: false, videoId: "yt0", title: "No sub" },
+      [{ start: 1, ko: "사랑해 정말 좋아해" }]
+    ),
+    false
+  );
+
+  // YouTube with overlay/subtitles OFF is rejected even when channel is active
+  assert.equal(
+    VocabLog.shouldRecord(
+      { active: true },
+      { enabled: true, showOverlay: false },
+      { isMusic: false, videoId: "yt_off", title: "ILLIT Vlog" },
+      [{ start: 1, ko: "사랑해 정말 좋아해" }]
+    ),
+    false
+  );
+
+  // YouTube Music with overlay OFF still records non-blacklisted Korean songs
+  assert.equal(
+    VocabLog.shouldRecord(
+      { active: true },
+      { enabled: true, showOverlay: false },
+      { isMusic: true, videoId: "mus_ok", title: "Korean Song" },
+      [{ start: 1, ko: "사랑해 정말 좋아해" }]
+    ),
+    true
+  );
+
+  // YouTube Music non-blacklisted with English-only or Japanese-only lyrics is filtered out
+  assert.equal(
+    VocabLog.shouldRecord(
+      { active: true },
+      { enabled: true },
+      { isMusic: true, videoId: "en1", title: "English Song" },
+      [{ start: 5, ko: "I really love you tonight baby" }]
+    ),
+    false
+  );
+  assert.equal(
+    VocabLog.shouldRecord(
+      { active: true },
+      { enabled: true },
+      { isMusic: true, videoId: "ja1", title: "Japanese Song" },
+      [{ start: 5, ko: "君のことが本当に好きだよ 今日もありがとう" }]
+    ),
+    false
+  );
+
+  // Active YouTube video with Korean subtitles records properly
+  const cues1 = [
+    { start: 12, ko: "오늘 정말 설레잖아", ja: "今日すごくときめくじゃない" },
+    { start: 45, ko: "설레고 기분 좋아", ja: "ときめいて気分いい" }
+  ];
+  const meta1 = { isMusic: false, videoId: "vid1", title: "ILLIT Vlog EP.1", author: "ILLIT" };
+  assert.equal(VocabLog.shouldRecord({ active: true }, { enabled: true }, meta1, cues1), true);
+  const r1 = VocabLog.recordVideo(store, meta1, cues1, 1000);
+  assert.equal(r1.added, true);
+  store = r1.store;
+  assert.equal(store.words["설레다"].videoCount, 1);
+  assert.equal(store.words["설레다"].totalCount, 2);
+  assert.equal(store.words["설레다"].occurrences.length, 2);
+  assert.equal(store.words["설레다"].occurrences[0].url, "https://www.youtube.com/watch?v=vid1&t=12s");
+  assert.equal(store.words["설레다"].occurrences[0].title, "ILLIT Vlog EP.1");
+
+  // Rewatching the same videoId MUST NOT double-count
+  const rDup = VocabLog.recordVideo(store, meta1, cues1, 2000);
+  assert.equal(rDup.added, false);
+  assert.equal(rDup.reason, "already_recorded");
+  store = rDup.store;
+  assert.equal(store.words["설레다"].videoCount, 1);
+  assert.equal(store.words["설레다"].totalCount, 2);
+
+  // Watching a second video (YT Music) adds another occurrence with music URL and increments videoCount
+  const meta2 = { isMusic: true, videoId: "mus2", title: "ILLIT - Magnetic", author: "ILLIT" };
+  const r2 = VocabLog.recordVideo(store, meta2, [{ start: 38, ko: "내 맘이 설레잖아", ja: "心がときめく" }], 3000);
+  assert.equal(r2.added, true);
+  store = r2.store;
+  assert.equal(store.words["설레다"].videoCount, 2);
+  assert.equal(store.words["설레다"].totalCount, 3);
+  assert.equal(store.words["설레다"].occurrences.length, 3);
+  assert.equal(store.words["설레다"].occurrences[2].url, "https://music.youtube.com/watch?v=mus2&t=38s");
+  assert.equal(store.words["설레다"].occurrences[2].title, "ILLIT - Magnetic");
+
+  // Ranking and SRS card conversion keep all occurrences
+  const ranked = VocabLog.rankWords(store, {}, { sort: "videos", filter: "unlearned" });
+  assert.equal(ranked[0].key, "설레다");
+  const card = VocabLog.toStudyCard(ranked[0]);
+  assert.equal(card.occurrences.length, 3);
+  assert.equal(card.sourceTitle, "ILLIT Vlog EP.1");
+
+  // Removing one video decrements counts cleanly
+  const rm = VocabLog.removeVideo(store, "vid1");
+  assert.equal(rm.removed, true);
+  assert.equal(rm.store.words["설레다"].videoCount, 1);
+  assert.equal(rm.store.words["설레다"].occurrences.length, 1);
+  assert.equal(rm.store.words["오늘"], undefined);
+});

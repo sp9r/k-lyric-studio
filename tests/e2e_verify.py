@@ -133,6 +133,55 @@ def run_e2e() -> None:
             studio.fill("#list-search", "설레")
             assert studio.locator("#word-list-container .kls-word-item").count() >= 1
 
+            # Test frequent vocab log tab (seeded into localStorage) with multi-video title links
+            studio.evaluate("""() => {
+                localStorage.setItem('kls:vocabLog', JSON.stringify({
+                    version: 1,
+                    videos: {
+                        'v1': { videoId: 'v1', title: 'ILLIT - Magnetic MV', site: 'youtube', recordedAt: 1000, uniqueWords: 2, wordKeys: ['설레다', '기분'], wordCounts: { '설레다': 2, '기분': 1 } },
+                        'v2': { videoId: 'v2', title: 'ILLIT - Cherish', site: 'music', recordedAt: 2000, uniqueWords: 1, wordKeys: ['설레다'], wordCounts: { '설레다': 1 } }
+                    },
+                    words: {
+                        '설레다': {
+                            key: '설레다', lemma: '설레다', surfaceSample: '설레잖아', meaning: 'ときめく', pos: '動詞',
+                            videoCount: 2, totalCount: 3, lastSeenAt: 2000,
+                            occurrences: [
+                                { videoId: 'v1', title: 'ILLIT - Magnetic MV', isMusic: false, sec: 42, url: 'https://www.youtube.com/watch?v=v1&t=42s', surface: '설레잖아', context: '설레잖아' },
+                                { videoId: 'v2', title: 'ILLIT - Cherish', isMusic: true, sec: 65, url: 'https://music.youtube.com/watch?v=v2&t=65s', surface: '설레고', context: '설레고' }
+                            ]
+                        },
+                        '기분': {
+                            key: '기분', lemma: '기분', surfaceSample: '기분', meaning: '気分', pos: '名詞',
+                            videoCount: 1, totalCount: 1, lastSeenAt: 1000,
+                            occurrences: [
+                                { videoId: 'v1', title: 'ILLIT - Magnetic MV', isMusic: false, sec: 18, url: 'https://www.youtube.com/watch?v=v1&t=18s', surface: '기분', context: '기분 좋아' }
+                            ]
+                        }
+                    }
+                }));
+            }""")
+            studio.reload(wait_until="networkidle")
+            studio.locator('[data-stab="freq"]').click()
+            studio.wait_for_selector("#freq-word-list .kls-occ-link")
+            occ_links = studio.eval_on_selector_all(
+                "#freq-word-list .kls-occ-link",
+                "els => els.map(e => ({ text: e.textContent, href: e.getAttribute('href') }))"
+            )
+            assert any("ILLIT - Magnetic MV" in l["text"] and "&t=42s" in l["href"] for l in occ_links), occ_links
+            assert any("ILLIT - Cherish" in l["text"] and "&t=65s" in l["href"] for l in occ_links), occ_links
+            assert_no_overflow(studio, "studio-freq")
+
+            # Add an unlearned frequent word into study cards and verify it appears in list with timestamped link
+            studio.locator('[data-fadd="기분"]').click()
+            assert "追加しました" in studio.locator("#freq-status").inner_text()
+            studio.locator('[data-stab="list"]').click()
+            studio.fill("#list-search", "기분")
+            list_occ = studio.eval_on_selector_all(
+                "#word-list-container .kls-occ-link",
+                "els => els.map(e => ({ text: e.textContent, href: e.getAttribute('href') }))"
+            )
+            assert any("ILLIT - Magnetic MV" in l["text"] and "&t=18s" in l["href"] for l in list_occ), list_occ
+
             # 3. Popup & Options (Desktop + Dark + Mobile)
             pop_page = ctx.new_page()
             pop_page.on("pageerror", lambda err: errors.append(f"popup pageerror: {err}"))

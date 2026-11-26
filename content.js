@@ -4,6 +4,7 @@
   const SRS = root.KLyricSRS;
   const Aligned = root.KLyricAligned;
   const Activation = root.KLyricActivation;
+  const VocabLog = root.KLyricVocabLog;
 
   const READING_MODES = [
     { id: "hybrid", label: "併用(カナ+ローマ字)" },
@@ -114,6 +115,8 @@
   const state = {
     settings: { ...DEFAULT_SETTINGS },
     savedCards: {},
+    vocabLog: null,
+    vocabRecordNote: "",
     meta: {
       isMusic: location.hostname === "music.youtube.com",
       url: location.href,
@@ -361,21 +364,70 @@
     } catch (_) {}
   }
 
+  let vocabRecordQueue = Promise.resolve();
+
+  function recordCurrentVideoVocab(cuesOverride) {
+    vocabRecordQueue = vocabRecordQueue.then(() => recordCurrentVideoVocabImpl(cuesOverride)).catch(() => {});
+    return vocabRecordQueue;
+  }
+
+  async function recordCurrentVideoVocabImpl(cuesOverride) {
+    const targetCues = Array.isArray(cuesOverride) ? cuesOverride : state.rawCues;
+    const targetVideoId = state.meta.videoId;
+    const targetMeta = { ...state.meta };
+    const targetAct = state.activationResult;
+    if (!VocabLog || !targetVideoId) return;
+    if (!VocabLog.shouldRecord(targetAct, state.settings, targetMeta, targetCues)) {
+      return;
+    }
+    const latest = await storageGet(["vocabLog"]);
+    if (state.meta.videoId !== targetVideoId) return;
+    const baseStore = VocabLog.normalizeStore(latest.vocabLog || state.vocabLog);
+    const res = VocabLog.recordVideo(baseStore, targetMeta, targetCues);
+    state.vocabLog = res.store;
+    if (res.added) {
+      await storageSet({ vocabLog: res.store });
+      state.vocabRecordNote = `単語帳記録 +${res.uniqueWords}語`;
+    } else if (res.reason === "already_recorded") {
+      state.vocabRecordNote = "単語帳記録済み";
+    }
+    if (state.dockEl) renderDock();
+  }
+
   async function saveWordCard(analysis, cue) {
     const key = analysis.clean;
     if (!key) return;
     const p = analysis.phonetics || Hangul.phoneticizeHangul(key);
-    const videoSec = Math.floor(cue?.start ?? state.videoEl?.currentTime ?? 0);
-    let sourceUrl = location.href;
-    try {
-      const u = new URL(location.href);
-      if (u.hostname.includes("youtube.com")) {
-        u.searchParams.set("t", `${videoSec}s`);
-        sourceUrl = u.toString();
-      }
-    } catch (_) {}
+    const videoSec = Math.max(0, Math.floor(cue?.start ?? state.videoEl?.currentTime ?? 0));
+    const vid = state.meta.videoId || "";
+    let sourceUrl = VocabLog && vid ? VocabLog.buildTimestampUrl(vid, videoSec, state.meta.isMusic) : location.href;
+    if (!vid) {
+      try {
+        const u = new URL(location.href);
+        if (u.hostname.includes("youtube.com")) {
+          u.searchParams.set("t", `${videoSec}s`);
+          sourceUrl = u.toString();
+        }
+      } catch (_) {}
+    }
 
+    const title = state.meta.title || document.title || "YouTube";
     const existing = state.savedCards[key] || {};
+    const newOcc = sourceUrl ? [{
+      videoId: vid,
+      title,
+      isMusic: Boolean(state.meta.isMusic),
+      sec: videoSec,
+      url: sourceUrl,
+      surface: key,
+      context: cue?.ko || key,
+      jaContext: cue?.ja || ""
+    }] : [];
+    const loggedWord = state.vocabLog && state.vocabLog.words ? (state.vocabLog.words[analysis.lemma || key] || state.vocabLog.words[key]) : null;
+    const mergedOccs = VocabLog
+      ? VocabLog.mergeOccurrences(VocabLog.mergeOccurrences(existing.occurrences, loggedWord && loggedWord.occurrences), newOcc)
+      : newOcc;
+
     state.savedCards[key] = {
       id: existing.id || `card-${key}`,
       surface: key,
@@ -390,9 +442,10 @@
       appliedRules: p.appliedRules || [],
       context: cue?.ko || key,
       jaContext: cue?.ja || "",
-      sourceTitle: state.meta.title || document.title || "YouTube",
-      sourceUrl,
-      timestampSec: videoSec,
+      sourceTitle: existing.sourceTitle || title,
+      sourceUrl: existing.sourceUrl || sourceUrl,
+      timestampSec: existing.timestampSec !== undefined ? existing.timestampSec : videoSec,
+      occurrences: mergedOccs,
       reps: existing.reps || 0,
       intervalDays: existing.intervalDays || 0,
       ease: existing.ease || 2.5,
@@ -429,7 +482,7 @@
     const rulesHtml = (p.appliedRules || [])
       .map((r) => `<span class="kls-badge is-accent">${escapeHtml(r)}</span>`)
       .join("");
-    const saved = Boolean(state.savedCards[analysis.clean]);
+    const saved = isWordSaved(analysis.clean);
     // Unknown words come back with a placeholder note instead of a meaning.
     const dictMeaning = analysis.matched === false ? "" : analysis.meaning || "";
 
@@ -761,7 +814,7 @@
       <div class="kls-dock-head">
         <div class="kls-brand">${ICONS.music}<span>K-Lyric Studio</span></div>
         <span class="kls-dock-head-right">
-          <span class="kls-status-text">${escapeHtml(state.sourceLabel)} ・ ${state.cues.length}行${state.translationNote ? ` ・ ${escapeHtml(state.translationNote)}` : ""}</span>
+          <span class="kls-status-text">${escapeHtml(state.sourceLabel)} ・ ${state.cues.length}行${state.translationNote ? ` ・ ${escapeHtml(state.translationNote)}` : ""}${state.vocabRecordNote ? ` ・ ${escapeHtml(state.vocabRecordNote)}` : ""}</span>
           <button type="button" class="kls-btn" data-act="collapse" aria-expanded="${state.dockCollapsed ? "false" : "true"}">${state.dockCollapsed ? ICONS.chevronUp : ICONS.chevronDown}<span>${state.dockCollapsed ? "広げる" : "たたむ"}</span></button>
         </span>
       </div>
@@ -863,6 +916,9 @@
     dock.querySelector('[data-act="overlay"]').onclick = async () => {
       state.settings.showOverlay = !state.settings.showOverlay;
       await storageSet({ settings: state.settings });
+      if (state.settings.showOverlay && state.rawCues.length) {
+        recordCurrentVideoVocab();
+      }
       renderDock();
       syncToCurrentTime();
     };
@@ -899,6 +955,7 @@
         state.showLrcBox = false;
         state.translationNote = "";
         applyCuesWithOffset();
+        recordCurrentVideoVocab();
         translateMissing(state.loadSeq);
       fillGlosses(state.loadSeq);
       }
@@ -921,6 +978,7 @@
           state.offsetSec = 0;
           state.sourceLabel = "Whisper AI字幕";
           applyCuesWithOffset();
+          recordCurrentVideoVocab();
         } else {
           state.sourceLabel = "AI字幕取得失敗";
           renderDock();
@@ -1098,6 +1156,7 @@
     state.rawCues = [];
     state.offsetSec = 0;
     state.translationNote = "";
+    state.vocabRecordNote = "";
     if (!state.meta.videoId) {
       state.sourceLabel = "再生待ち";
       applyCuesWithOffset();
@@ -1143,6 +1202,7 @@
           state.offsetSec = 0;
           state.sourceLabel = "YouTube字幕";
           applyCuesWithOffset();
+          recordCurrentVideoVocab();
           translateMissing(seq);
           fillGlosses(seq);
           return;
@@ -1171,6 +1231,7 @@
           state.offsetSec = 0;
           state.sourceLabel = "YouTube字幕";
           applyCuesWithOffset();
+          recordCurrentVideoVocab();
           translateMissing(seq);
           fillGlosses(seq);
           return;
@@ -1185,6 +1246,7 @@
       Hangul.cleanTrackQuery(state.meta.title, state.meta.author),
       Hangul.cleanTrackQuery(state.meta.title, "")
     ].filter((q, i, arr) => q && arr.indexOf(q) === i);
+    let plainFallbackLyrics = "";
     for (const query of queries) {
       const dur = state.videoEl && state.videoEl.duration ? state.videoEl.duration : 0;
       const lrcResp = await sendBg({ type: "kls:fetch-lrclib", query, duration: dur });
@@ -1201,11 +1263,30 @@
           state.offsetSec = 0;
           state.sourceLabel = "LRCLIB 同期歌詞";
           applyCuesWithOffset();
+          recordCurrentVideoVocab();
           translateMissing(seq);
           fillGlosses(seq);
           return;
         }
       }
+      if (!plainFallbackLyrics && state.meta.isMusic && lrcResp && lrcResp.ok && lrcResp.plainLyrics) {
+        plainFallbackLyrics = lrcResp.plainLyrics;
+      }
+    }
+
+    // On YouTube Music, record Korean vocabulary even when only unsynced plainLyrics exist.
+    if (state.meta.isMusic && plainFallbackLyrics) {
+      const lines = plainFallbackLyrics.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+      const dur = state.videoEl && state.videoEl.duration ? state.videoEl.duration : lines.length * 4;
+      const step = dur / Math.max(1, lines.length);
+      const plainCues = lines.map((line, i) => ({
+        id: i,
+        start: Number((i * step).toFixed(2)),
+        end: Number(((i + 1) * step).toFixed(2)),
+        ko: line,
+        ja: ""
+      }));
+      recordCurrentVideoVocab(plainCues);
     }
 
     state.sourceLabel = captionError ? `字幕未検出（${captionError}）` : "字幕未検出";
@@ -1252,10 +1333,11 @@
   }
 
   async function init(initialMeta) {
-    const stored = await storageGet(["settings", "savedCards", "dockCollapsed", "activation"]);
+    const stored = await storageGet(["settings", "savedCards", "vocabLog", "dockCollapsed", "activation"]);
     state.dockCollapsed = Boolean(stored.dockCollapsed);
     if (stored.settings) state.settings = { ...DEFAULT_SETTINGS, ...stored.settings };
     if (stored.savedCards && typeof stored.savedCards === "object") state.savedCards = stored.savedCards;
+    state.vocabLog = VocabLog ? VocabLog.normalizeStore(stored.vocabLog) : null;
     state.activation = Activation ? Activation.normalize(stored.activation) : null;
     if (initialMeta) state.meta = { ...state.meta, ...initialMeta };
     state.activationResult = currentActivation();
@@ -1293,9 +1375,18 @@
           refreshActivation(false);
         }
         if (changes.settings && changes.settings.newValue) {
+          const prevOverlay = state.settings.showOverlay;
+          const prevEnabled = state.settings.enabled;
           state.settings = { ...DEFAULT_SETTINGS, ...changes.settings.newValue };
+          if ((state.settings.enabled && !prevEnabled) || (state.settings.showOverlay && !prevOverlay)) {
+            if (state.rawCues.length) recordCurrentVideoVocab();
+            else if (state.settings.enabled && !prevEnabled) loadSubtitlesForMeta(false);
+          }
           renderDock();
           syncToCurrentTime();
+        }
+        if (changes.vocabLog) {
+          state.vocabLog = VocabLog ? VocabLog.normalizeStore(changes.vocabLog.newValue) : null;
         }
         if (changes.savedCards && changes.savedCards.newValue) {
           state.savedCards = changes.savedCards.newValue;
