@@ -78,7 +78,11 @@
     const total = all.length;
     const due = all.filter((c) => SRS.isDue(c)).length;
     const mastered = all.filter((c) => c.mastered).length;
-    document.getElementById("studio-stats").textContent = `登録 ${total} / 復習待ち ${due} / 習得 ${mastered}`;
+    const learning = total - mastered;
+    const seenOnly = VocabLog
+      ? VocabLog.rankWords(state.vocabLog, state.savedCards, { sort: "videos", filter: "unlearned" }).length
+      : 0;
+    document.getElementById("studio-stats").textContent = `既知 ${mastered} / 学習中 ${learning} / 既出 ${seenOnly}語（復習待ち ${due}）`;
     const mPct = total ? Math.round((mastered / total) * 100) : 0;
     const lPct = total ? Math.max(0, 100 - mPct) : 0;
     document.getElementById("s-bar-mastered").style.width = `${mPct}%`;
@@ -269,7 +273,7 @@
     const allWords = VocabLog.rankWords(store, state.savedCards, { sort: "videos", filter: "all" });
     const unlearnedCount = allWords.filter((w) => !w.saved).length;
     document.getElementById("freq-summary").textContent =
-      `記録動画 ${videoCount}本 / 記録単語 ${allWords.length}語 / 未登録 ${unlearnedCount}語（同一動画は重複カウントしません）`;
+      `記録動画 ${videoCount}本 / 既出単語 ${allWords.length}語 / 未登録 ${unlearnedCount}語（同一動画は重複カウントしません）`;
     document.getElementById("freq-status").textContent = state.freqMessage || "";
 
     const query = document.getElementById("freq-search").value;
@@ -280,7 +284,7 @@
     const listEl = document.getElementById("freq-word-list");
     listEl.innerHTML = "";
     if (!rows.length) {
-      listEl.innerHTML = `<div class="kls-muted">${allWords.length ? "条件に一致する単語がありません。" : "まだ動画からの記録がありません。YouTube（字幕ON）または YouTube Music で韓国語の動画・曲を再生すると自動でここに溜まります。"}</div>`;
+      listEl.innerHTML = `<div class="kls-muted">${allWords.length ? "条件に一致する単語がありません。" : "まだ動画からの記録がありません。YouTube（字幕ON・サムネイルの＋ボタン）または YouTube Music で韓国語の動画・曲を扱うと自動でここに溜まります。"}</div>`;
     } else {
       for (const w of rows.slice(0, 200)) {
         const cardLike = { surface: w.key };

@@ -352,3 +352,42 @@ test("vocab_log: records Korean words once per videoId, ignores English-only and
   assert.equal(rm.store.words["설레다"].occurrences.length, 1);
   assert.equal(rm.store.words["오늘"], undefined);
 });
+
+test("computeVocabularyStats distinguishes known, learning, seen (vocabLog), and unseen", () => {
+  const cues = [
+    { ko: "설레잖아 같이 오늘 처음단어" }
+  ];
+  const saved = {
+    "설레잖아": { surface: "설레잖아", mastered: true },
+    "같이": { surface: "같이", mastered: false }
+  };
+  const vocabLog = {
+    version: 1,
+    videos: {
+      "prev_vid": { videoId: "prev_vid", wordCounts: { "오늘": 1 } },
+      "cur_vid": { videoId: "cur_vid", wordCounts: { "오늘": 1, "처음단어": 1 } }
+    },
+    words: {
+      "오늘": { key: "오늘", videoCount: 2, totalCount: 2 },
+      "처음단어": { key: "처음단어", videoCount: 1, totalCount: 1 }
+    }
+  };
+
+  // First watch (excluding current video's own just-recorded contribution):
+  // 오늘 appeared in prev_vid too -> seen; 처음단어 appeared only in cur_vid -> unseen
+  const firstWatch = Dict.computeVocabularyStats(cues, saved, vocabLog, { excludeVideoId: "cur_vid" });
+  assert.equal(firstWatch.total, 4);
+  assert.equal(firstWatch.known, 1);
+  assert.equal(firstWatch.learning, 1);
+  assert.equal(firstWatch.seen, 1);
+  assert.equal(firstWatch.unseen, 1);
+  assert.equal(firstWatch.knownPct + firstWatch.learningPct + firstWatch.seenPct + firstWatch.unseenPct, 100);
+
+  // Rewatch (no exclusion): both 오늘 and 처음단어 are in vocabLog -> seen = 2, unseen = 0
+  const rewatch = Dict.computeVocabularyStats(cues, saved, vocabLog);
+  assert.equal(rewatch.known, 1);
+  assert.equal(rewatch.learning, 1);
+  assert.equal(rewatch.seen, 2);
+  assert.equal(rewatch.unseen, 0);
+  assert.equal(rewatch.seenPct, 50);
+});

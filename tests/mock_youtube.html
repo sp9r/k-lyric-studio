@@ -70,6 +70,44 @@
       font-size: 13px;
       color: #606060;
     }
+    .mock-related {
+      display: grid;
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .mock-rel-card {
+      display: grid;
+      grid-template-columns: 140px minmax(0, 1fr);
+      gap: 10px;
+      padding: 8px;
+      background: #fff;
+      border: 1px solid #dfe2e6;
+      border-radius: 8px;
+      align-items: center;
+    }
+    .mock-rel-thumb {
+      position: relative;
+      display: block;
+      width: 140px;
+      aspect-ratio: 16 / 9;
+      background: #1d222b;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .mock-rel-thumb a {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      color: #cfd5dd;
+      font-size: 11px;
+      text-decoration: none;
+    }
+    .mock-rel-title {
+      font-size: 13px;
+      font-weight: 600;
+    }
   </style>
 </head>
 <body>
@@ -91,11 +129,78 @@
         <div class="ch">HYBE LABELS</div>
       </div>
     </div>
-    <div id="secondary-inner"></div>
+    <div>
+      <div id="secondary-inner"></div>
+      <div class="mock-related">
+        <div class="mock-rel-card kls-mock-card">
+          <yt-thumbnail-view-model class="mock-rel-thumb">
+            <a href="https://www.youtube.com/watch?v=quick_new_1">Thumbnail 1</a>
+          </yt-thumbnail-view-model>
+          <div>
+            <div class="mock-rel-title" data-kls-title>ILLIT Vlog 単語テスト</div>
+            <div class="ch" style="font-size:11px;color:#606060;">ILLIT</div>
+          </div>
+        </div>
+        <div class="mock-rel-card kls-mock-card">
+          <ytd-thumbnail class="mock-rel-thumb">
+            <a href="https://www.youtube.com/watch?v=quick_done_1">Thumbnail 2</a>
+          </ytd-thumbnail>
+          <div>
+            <div class="mock-rel-title" data-kls-title>ILLIT 記録済みテスト</div>
+            <div class="ch" style="font-size:11px;color:#606060;">ILLIT</div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script>
     window.__KLS_MANUAL_INIT__ = true;
+    window.__KLS_ALLOW_QUICK_SCAN__ = true;
+    window.__KLS_QUICK_CALLS__ = [];
+    window.__KLS_QUICK_FETCH__ = async (videoId, fallbackMeta) => {
+      window.__KLS_QUICK_CALLS__.push(videoId);
+      return {
+        meta: {
+          isMusic: false,
+          videoId,
+          title: (fallbackMeta && fallbackMeta.title) || "ILLIT Vlog 単語テスト",
+          author: "ILLIT"
+        },
+        cues: [
+          { id: 0, start: 4, end: 8, ko: "안녕하세요 오늘 정말 반가워요", ja: "こんにちは今日とても嬉しいです" },
+          { id: 1, start: 12, end: 16, ko: "연습 열심히 하고 있어요", ja: "練習を頑張っています" }
+        ]
+      };
+    };
+    if (!localStorage.getItem("kls:vocabLog")) {
+      localStorage.setItem("kls:vocabLog", JSON.stringify({
+        version: 1,
+        videos: {
+          "quick_done_1": {
+            videoId: "quick_done_1",
+            title: "ILLIT 記録済みテスト",
+            site: "youtube",
+            recordedAt: 1000,
+            uniqueWords: 2,
+            wordKeys: ["오늘", "연습"],
+            wordCounts: { "오늘": 1, "연습": 1 }
+          }
+        },
+        words: {
+          "오늘": {
+            key: "오늘", lemma: "오늘", surfaceSample: "오늘", meaning: "今日", pos: "名詞",
+            videoCount: 1, totalCount: 1, lastSeenAt: 1000,
+            occurrences: [{ videoId: "quick_done_1", title: "ILLIT 記録済みテスト", isMusic: false, sec: 10, url: "https://www.youtube.com/watch?v=quick_done_1&t=10s", surface: "오늘", context: "오늘 연습" }]
+          },
+          "연습": {
+            key: "연습", lemma: "연습", surfaceSample: "연습", meaning: "練習", pos: "名詞",
+            videoCount: 1, totalCount: 1, lastSeenAt: 1000,
+            occurrences: [{ videoId: "quick_done_1", title: "ILLIT 記録済みテスト", isMusic: false, sec: 10, url: "https://www.youtube.com/watch?v=quick_done_1&t=10s", surface: "연습", context: "오늘 연습" }]
+          }
+        }
+      }));
+    }
     // Stub HTMLMediaElement time & playback state cleanly without requiring a media file
     const v = document.getElementById("mock-video");
     let fakeTime = 42.5;

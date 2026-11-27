@@ -9,6 +9,7 @@
     showOverlay: true,
     showHanja: true,
     showGloss: true,
+    showQuickRecord: true,
     enableBridge: false,
     bridgeUrl: "http://127.0.0.1:8788"
   };
@@ -50,6 +51,7 @@
     document.getElementById("opt-overlay").checked = settings.showOverlay !== false;
     document.getElementById("opt-hanja").checked = settings.showHanja !== false;
     document.getElementById("opt-gloss").checked = settings.showGloss !== false;
+    document.getElementById("opt-quick-record").checked = settings.showQuickRecord !== false;
     document.getElementById("opt-autopause").checked = Boolean(settings.autoPauseOnClick);
     document.getElementById("opt-shortcuts").checked = Boolean(settings.shortcutsEnabled);
     document.getElementById("opt-bridge").checked = Boolean(settings.enableBridge);
@@ -64,6 +66,7 @@
       showOverlay: document.getElementById("opt-overlay").checked,
       showHanja: document.getElementById("opt-hanja").checked,
       showGloss: document.getElementById("opt-gloss").checked,
+      showQuickRecord: document.getElementById("opt-quick-record").checked,
       autoPauseOnClick: document.getElementById("opt-autopause").checked,
       shortcutsEnabled: document.getElementById("opt-shortcuts").checked,
       enableBridge: document.getElementById("opt-bridge").checked,
@@ -169,6 +172,7 @@
     document.getElementById("opt-overlay").onchange = save;
     document.getElementById("opt-hanja").onchange = save;
     document.getElementById("opt-gloss").onchange = save;
+    document.getElementById("opt-quick-record").onchange = save;
     document.getElementById("opt-autopause").onchange = save;
     document.getElementById("opt-shortcuts").onchange = save;
     document.getElementById("opt-bridge").onchange = save;

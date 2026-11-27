@@ -9,6 +9,7 @@
   --kls-accent: #3d6391;
   --kls-success: #2f7d4d;
   --kls-warn: #a16207;
+  --kls-unseen: #cfd5dd;
   --kls-hanja: #7e22ce;
   /* Fonts are named explicitly: with only "Noto Sans KR/JP" (not installed on Windows) the
      browser fell back to a Chinese font (Microsoft YaHei) for kanji and some hangul. */
@@ -57,6 +58,7 @@ ytd-app[dark] {
   --kls-accent: #7aa4d6;
   --kls-success: #6db586;
   --kls-warn: #eab308;
+  --kls-unseen: #3e4652;
   --kls-hanja: #c9a2f2;
 }
 
@@ -114,6 +116,10 @@ ytd-app[dark] {
 
 .kls-word-btn.is-saved {
   border-bottom: 2px solid #6db586;
+}
+
+.kls-word-btn.is-seen {
+  border-bottom: 2px solid #7aa4d6;
 }
 
 .kls-overlay-reading {
@@ -281,10 +287,34 @@ ytd-app[dark] {
 
 .kls-cov-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
+  gap: 3px 8px;
   font-size: 11px;
   margin-bottom: 4px;
+}
+
+.kls-cov-legend {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.kls-cov-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+}
+
+.kls-cov-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+  flex: none;
 }
 
 .kls-cov-bar {
@@ -298,7 +328,8 @@ ytd-app[dark] {
 
 .kls-cov-known { background: var(--kls-success); }
 .kls-cov-learning { background: var(--kls-warn); }
-.kls-cov-unseen { background: var(--kls-accent); }
+.kls-cov-seen { background: var(--kls-accent); }
+.kls-cov-unseen { background: var(--kls-unseen); }
 
 .kls-controls {
   display: flex;
@@ -840,4 +871,77 @@ ytmusic-player .kls-subtitle-overlay {
   font-size: 10.5px;
   line-height: 13px;
   color: var(--kls-warn);
+}
+
+/* Minimal thumbnail quick-record button (YouTube Home / Feed / Related) */
+.kls-thumb-rec {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 25;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  background: rgba(20, 23, 28, 0.82);
+  color: #f5f6f7;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.14s ease, background 0.14s ease;
+}
+
+ytd-thumbnail:hover .kls-thumb-rec,
+yt-thumbnail-view-model:hover .kls-thumb-rec,
+ytd-rich-item-renderer:hover .kls-thumb-rec,
+ytd-compact-video-renderer:hover .kls-thumb-rec,
+ytd-video-renderer:hover .kls-thumb-rec,
+ytd-grid-video-renderer:hover .kls-thumb-rec,
+yt-lockup-view-model:hover .kls-thumb-rec,
+.kls-thumb-host:hover .kls-thumb-rec,
+.kls-thumb-rec:hover,
+.kls-thumb-rec:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.kls-thumb-rec.is-recorded {
+  opacity: 0.9;
+  pointer-events: auto;
+  background: rgba(47, 125, 77, 0.92);
+  border-color: rgba(255, 255, 255, 0.28);
+  cursor: default;
+}
+
+.kls-thumb-rec.is-loading {
+  opacity: 1;
+  pointer-events: none;
+}
+
+.kls-thumb-rec.is-empty {
+  opacity: 0.72;
+  pointer-events: auto;
+  background: rgba(38, 43, 50, 0.82);
+  color: #aeb6c2;
+  cursor: default;
+}
+
+.kls-thumb-rec svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+@keyframes kls-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.kls-thumb-rec.is-loading svg {
+  animation: kls-spin 0.9s linear infinite;
 }

@@ -84,7 +84,8 @@
     const mastered = list.filter((c) => c.mastered).length;
     const due = list.filter((c) => window.KLyricSRS.isDue(c)).length;
     const total = list.length;
-    document.getElementById("popup-stats-text").textContent = `登録 ${total} / 復習待ち ${due} / 習得 ${mastered}`;
+    const learning = total - mastered;
+    document.getElementById("popup-stats-text").textContent = `既知 ${mastered} / 学習中 ${learning} / 復習待ち ${due}`;
     const mPct = total ? Math.round((mastered / total) * 100) : 0;
     const lPct = total ? Math.max(0, 100 - mPct) : 0;
     document.getElementById("bar-mastered").style.width = `${mPct}%`;
@@ -92,10 +93,17 @@
 
     const freqEl = document.getElementById("popup-freq-stats");
     if (freqEl) {
-      const freqWords = Object.keys((vocabLog && vocabLog.words) || {}).length;
+      const wordsMap = (vocabLog && vocabLog.words) || {};
+      const freqList = Object.values(wordsMap);
+      const freqWords = freqList.length;
       const freqVideos = Object.keys((vocabLog && vocabLog.videos) || {}).length;
+      const unregistered = freqList.filter((w) => {
+        if (!w || !w.key) return false;
+        if (savedCards[w.key] || (w.surfaceSample && savedCards[w.surfaceSample])) return false;
+        return !list.some((c) => c && (c.lemma === w.key || c.surface === w.key));
+      }).length;
       if (freqWords > 0) {
-        freqEl.textContent = `頻出単語帳: ${freqWords}語（${freqVideos}動画から記録）`;
+        freqEl.textContent = `既出単語: ${freqWords}語（${freqVideos}動画・未登録 ${unregistered}語）`;
         freqEl.classList.remove("kls-hidden");
       } else {
         freqEl.textContent = "";

@@ -90,6 +90,24 @@ def run_e2e() -> None:
 
             # Frequent vocab book shortcut button sits next to studio button and triggers kls:open-studio {tab: "freq"}
             assert page.locator('[data-act="vocab-book"]').inner_text().strip() == "頻出単語帳"
+            assert page.locator('[data-act="toggle-lrc"]').inner_text().strip() == "字幕・LRC貼付"
+            cov_text = page.locator(".kls-cov-wrap").inner_text()
+            assert "語彙カバー" in cov_text and "既知" in cov_text and "学習中" in cov_text and "既出" in cov_text and "新出" in cov_text, cov_text
+            assert page.locator(".kls-cov-bar .kls-cov-seen").count() == 1
+
+            # Quick-record thumbnail buttons: pre-recorded skips fetch, unrecorded records quietly without navigating
+            page.wait_for_selector('.kls-thumb-rec[data-kls-vid="quick_done_1"].is-recorded', state="attached")
+            page.wait_for_selector('.kls-thumb-rec[data-kls-vid="quick_new_1"]:not(.is-recorded)', state="attached")
+            page.locator('.kls-thumb-rec[data-kls-vid="quick_done_1"]').click(force=True)
+            assert page.evaluate("window.__KLS_QUICK_CALLS__.length") == 0, "Already recorded video should skip fetch"
+            page.locator('.kls-thumb-rec[data-kls-vid="quick_new_1"]').click(force=True)
+            page.wait_for_selector('.kls-thumb-rec[data-kls-vid="quick_new_1"].is-recorded', state="attached")
+            assert "mock_youtube.html" in page.url, "Quick record must not navigate away"
+            assert page.evaluate("window.__KLS_QUICK_CALLS__") == ["quick_new_1"]
+            assert page.evaluate("Boolean(JSON.parse(localStorage.getItem('kls:vocabLog') || '{}').videos?.quick_new_1)") is True
+            # Clicking again on the newly recorded video skips duplicate fetch
+            page.locator('.kls-thumb-rec[data-kls-vid="quick_new_1"]').click(force=True)
+            assert page.evaluate("window.__KLS_QUICK_CALLS__.length") == 1, "Second click on recorded video must skip"
             sent_msg = page.evaluate("""() => {
                 let captured = null;
                 window.chrome = { runtime: { sendMessage: (m, cb) => { captured = m; if (cb) cb({ ok: true }); } } };
@@ -234,7 +252,7 @@ def run_e2e() -> None:
                     const sp = row.querySelector('span').getBoundingClientRect();
                     return { id: row.querySelector('input').id, cbTop: cb.top, spTop: sp.top, cbRight: cb.right, spLeft: sp.left, topDiff: Math.abs(cb.top - sp.top) };
                 })""")
-                assert len(rows) == 6, f"Expected 6 check rows, got {len(rows)}"
+                assert len(rows) == 7, f"Expected 7 check rows, got {len(rows)}"
                 for r in rows:
                     assert r["topDiff"] <= 6 and r["cbRight"] <= r["spLeft"], f"Checkbox misaligned at {theme} {vp_w}x{vp_h}: {r}"
                 if vp_w >= 640:
@@ -255,10 +273,10 @@ def run_e2e() -> None:
             opt_page.on("console", lambda msg: errors.append(f"options console.{msg.type}: {msg.text}") if msg.type == "error" else None)
             opt_page.goto(f"{base}/options.html", wait_until="networkidle")
             opt_page.select_option("#opt-reading", "katakana")
-            for cid in ("#opt-gloss", "#opt-autopause", "#opt-shortcuts", "#opt-bridge"):
+            for cid in ("#opt-gloss", "#opt-quick-record", "#opt-autopause", "#opt-shortcuts", "#opt-bridge"):
                 opt_page.locator(cid).click()
             saved = opt_page.evaluate("() => JSON.parse(localStorage.getItem('kls:settings') || '{}')")
-            assert saved["readingMode"] == "katakana" and saved["showGloss"] is False and saved["autoPauseOnClick"] is False and saved["shortcutsEnabled"] is False and saved["enableBridge"] is True, saved
+            assert saved["readingMode"] == "katakana" and saved["showGloss"] is False and saved["showQuickRecord"] is False and saved["autoPauseOnClick"] is False and saved["shortcutsEnabled"] is False and saved["enableBridge"] is True, saved
             opt_page.locator('a[href="studio.html#freq"]').click()
             opt_page.wait_for_url("**/studio.html#freq")
             opt_page.wait_for_selector('[data-stab="freq"].is-active')

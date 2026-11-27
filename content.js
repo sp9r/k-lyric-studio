@@ -24,6 +24,7 @@
     showOverlay: true,
     showHanja: true,
     showGloss: true,
+    showQuickRecord: true,
     enableBridge: false,
     bridgeUrl: "http://127.0.0.1:8788"
   };
@@ -50,6 +51,9 @@
     translate: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h8"></path><path d="M8 3v2"></path><path d="M5 9c1.5 3 4 5 7 6"></path><path d="M11 5c-1 4-3.5 7-7 9"></path><path d="M13 21l4-9 4 9"></path><path d="M14.5 18h5"></path></svg>`,
     cc: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"></rect><path d="M10 10.5a2 2 0 1 0 0 3"></path><path d="M17 10.5a2 2 0 1 0 0 3"></path></svg>`,
     plus: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>`,
+    check: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="20 6 9 17 4 12"></polyline></svg>`,
+    spinner: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></svg>`,
+    minus: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="5" y1="12" x2="19" y2="12"></line></svg>`,
     ban: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="4.9" y1="4.9" x2="19.1" y2="19.1"></line></svg>`,
     close: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`
   };
@@ -118,6 +122,8 @@
     savedCards: {},
     vocabLog: null,
     vocabRecordNote: "",
+    newlyRecordedVideoId: "",
+    quickStatus: {},
     meta: {
       isMusic: location.hostname === "music.youtube.com",
       url: location.href,
@@ -198,6 +204,25 @@
     if (state.savedCards[clean]) return true;
     const analysis = Dict.analyzeToken(clean);
     return Boolean(analysis.lemma && state.savedCards[analysis.lemma]);
+  }
+
+  function isWordSeenInLog(clean) {
+    if (!clean || !state.vocabLog || !state.vocabLog.words) return false;
+    const analysis = Dict.analyzeToken(clean);
+    const logKey = analysis.matched && analysis.lemma ? analysis.lemma : clean;
+    const lemmaKey = analysis.lemma || clean;
+    const entry = state.vocabLog.words[logKey] || state.vocabLog.words[lemmaKey] || state.vocabLog.words[clean];
+    if (!entry) return false;
+    if (state.newlyRecordedVideoId && state.newlyRecordedVideoId === state.meta.videoId) {
+      const fromNew = Boolean(
+        state.vocabLog.videos &&
+        state.vocabLog.videos[state.newlyRecordedVideoId] &&
+        state.vocabLog.videos[state.newlyRecordedVideoId].wordCounts &&
+        state.vocabLog.videos[state.newlyRecordedVideoId].wordCounts[entry.key]
+      );
+      return (Number(entry.videoCount) || 0) - (fromNew ? 1 : 0) >= 1;
+    }
+    return (Number(entry.videoCount) || 0) >= 1;
   }
 
   function findVideoElement() {
@@ -323,7 +348,7 @@
     overlay.classList.remove("kls-hidden");
     // timeupdate fires several times a second; rebuilding the buttons each time would
     // swap them out from under a click, so only rebuild when something visible changed.
-    const renderKey = [cue.start, cue.ko, cue.ja, state.settings.showTranslation, state.settings.showHanja, state.settings.showGloss, state.glossVersion, state.settings.readingMode, state.selectedWord, Object.keys(state.savedCards).length].join("|");
+    const renderKey = [cue.start, cue.ko, cue.ja, state.settings.showTranslation, state.settings.showHanja, state.settings.showGloss, state.glossVersion, state.settings.readingMode, state.selectedWord, Object.keys(state.savedCards).length, Object.keys((state.vocabLog && state.vocabLog.words) || {}).length, state.newlyRecordedVideoId].join("|");
     if (renderKey === state.overlayKey && overlay.firstChild) return;
     state.overlayKey = renderKey;
     const rows = Aligned.rowsForMode(state.settings.readingMode);
@@ -333,10 +358,11 @@
         const tok = token.surface;
         const clean = Dict.cleanHangulWord(tok);
         const saved = isWordSaved(clean);
+        const seen = !saved && isWordSeenInLog(clean);
         const active = clean && clean === state.selectedWord;
         const cls =
           "kls-word-btn" +
-          (saved ? " is-saved" : "") +
+          (saved ? " is-saved" : seen ? " is-seen" : "") +
           (active ? " is-active" : "");
         return `<button type="button" class="${cls}" data-word="${escapeHtml(tok)}">${Aligned.renderWord(token, rows, hanjaRow, glossArg(token))}</button>`;
       })
@@ -387,11 +413,13 @@
     const res = VocabLog.recordVideo(baseStore, targetMeta, targetCues);
     state.vocabLog = res.store;
     if (res.added) {
+      state.newlyRecordedVideoId = targetVideoId;
       await storageSet({ vocabLog: res.store });
       state.vocabRecordNote = `単語帳記録 +${res.uniqueWords}語`;
     } else if (res.reason === "already_recorded") {
       state.vocabRecordNote = "単語帳記録済み";
     }
+    refreshThumbButtons();
     if (state.dockEl) renderDock();
   }
 
@@ -741,15 +769,26 @@
     const res = state.activationResult || {};
     const blocked = Boolean(res.rule);
     const canChannel = Boolean(state.meta.channelId || state.meta.author);
+    const vid = state.meta.videoId;
+    const recDone = Boolean(vid && state.vocabLog && state.vocabLog.videos && state.vocabLog.videos[vid]);
+    const recSt = vid ? state.quickStatus[vid] : "";
+    const recLabel = recDone ? "記録済み" : recSt === "loading" ? "記録中" : recSt === "empty" ? "字幕なし" : "単語だけ記録";
+    const recIcon = recDone ? ICONS.check : recSt === "loading" ? ICONS.spinner : recSt === "empty" ? ICONS.minus : ICONS.plus;
+    const recCls = "kls-btn" + (recDone ? " is-active" : "");
     el.title = res.reason || "";
     el.innerHTML = `
       <span class="kls-launcher-label">${ICONS.music}<span>K-Lyric</span></span>
       <button type="button" class="kls-btn" data-act="allow-video">${ICONS.plus}<span>${blocked ? "この動画で再表示" : "この動画で表示"}</span></button>
       ${canChannel && res.mode === "whitelist" ? `<button type="button" class="kls-btn" data-act="allow-channel">${ICONS.plus}<span>このチャンネルで表示</span></button>` : ""}
+      ${!state.meta.isMusic && vid ? `<button type="button" class="${recCls}" data-act="quick-record-here"${recDone || recSt === "loading" ? " disabled" : ""}>${recIcon}<span>${recLabel}</span></button>` : ""}
     `;
     el.querySelector('[data-act="allow-video"]').onclick = () => saveActivation(Activation.allowHere(state.activation, state.meta, "video"));
     const chBtn = el.querySelector('[data-act="allow-channel"]');
     if (chBtn) chBtn.onclick = () => saveActivation(Activation.allowHere(state.activation, state.meta, "channel"));
+    const qrBtn = el.querySelector('[data-act="quick-record-here"]');
+    if (qrBtn) {
+      qrBtn.onclick = () => quickRecordVideo(vid, { ...state.meta });
+    }
   }
 
   function activationRowHtml() {
@@ -788,7 +827,8 @@
     dock.classList.remove("kls-hidden");
     dock.classList.toggle("is-collapsed", state.dockCollapsed);
 
-    const cov = Dict.computeVocabularyStats(state.cues, state.savedCards);
+    const excludeVid = state.newlyRecordedVideoId && state.newlyRecordedVideoId === state.meta.videoId ? state.meta.videoId : "";
+    const cov = Dict.computeVocabularyStats(state.cues, state.savedCards, state.vocabLog, { excludeVideoId: excludeVid });
     const speed = SPEED_STEPS[state.speedIdx];
     const readLabel = getReadingLabel(state.settings.readingMode);
 
@@ -809,7 +849,7 @@
             `;
           })
           .join("")
-      : `<div class="kls-status-text" style="padding:10px;">韓国語字幕・同期歌詞を読み込み中、または「歌詞・LRC貼付」から手入力できます。</div>`;
+      : `<div class="kls-status-text" style="padding:10px;">韓国語字幕・テキストを読み込み中、または「字幕・LRC貼付」から手入力できます。</div>`;
 
     dock.innerHTML = `
       <div class="kls-dock-head">
@@ -822,12 +862,18 @@
       ${activationRowHtml()}
       <div class="kls-cov-wrap">
         <div class="kls-cov-row">
-          <span>曲内の語彙カバー</span>
-          <span>既知 ${cov.knownPct}% / 学習中 ${cov.learningPct}% / 新出 ${cov.unseenPct}%</span>
+          <span>語彙カバー</span>
+          <span class="kls-cov-legend" title="既知 ${cov.known}語 / 学習中 ${cov.learning}語 / 既出 ${cov.seen}語 / 新出 ${cov.unseen}語（計 ${cov.total}語）">
+            <span class="kls-cov-item"><i class="kls-cov-dot kls-cov-known"></i>既知 ${cov.knownPct}%</span>
+            <span class="kls-cov-item"><i class="kls-cov-dot kls-cov-learning"></i>学習中 ${cov.learningPct}%</span>
+            <span class="kls-cov-item"><i class="kls-cov-dot kls-cov-seen"></i>既出 ${cov.seenPct}%</span>
+            <span class="kls-cov-item"><i class="kls-cov-dot kls-cov-unseen"></i>新出 ${cov.unseenPct}%</span>
+          </span>
         </div>
         <div class="kls-cov-bar">
           <div class="kls-cov-known" style="width:${cov.knownPct}%"></div>
           <div class="kls-cov-learning" style="width:${cov.learningPct}%"></div>
+          <div class="kls-cov-seen" style="width:${cov.seenPct}%"></div>
           <div class="kls-cov-unseen" style="width:${cov.unseenPct}%"></div>
         </div>
       </div>
@@ -840,7 +886,7 @@
         <button type="button" class="kls-btn${state.settings.showHanja !== false ? " is-active" : ""}" data-act="hanja" aria-pressed="${state.settings.showHanja !== false ? "true" : "false"}">${ICONS.kanji}<span>漢字${state.settings.showHanja !== false ? "" : "(非表示)"}</span></button>
         <button type="button" class="kls-btn${state.settings.showGloss !== false ? " is-active" : ""}" data-act="gloss" aria-pressed="${state.settings.showGloss !== false ? "true" : "false"}">${ICONS.cards}<span>単語訳${state.settings.showGloss !== false ? "" : "(非表示)"}</span></button>
         <button type="button" class="kls-btn${state.settings.showTranslation ? " is-active" : ""}" data-act="translation" aria-pressed="${state.settings.showTranslation ? "true" : "false"}">${ICONS.translate}<span>日本語訳${state.settings.showTranslation ? "" : "(非表示)"}</span></button>
-        <button type="button" class="kls-btn${state.showLrcBox ? " is-active" : ""}" data-act="toggle-lrc">${ICONS.paste}<span>歌詞・LRC貼付</span></button>
+        <button type="button" class="kls-btn${state.showLrcBox ? " is-active" : ""}" data-act="toggle-lrc">${ICONS.paste}<span>字幕・LRC貼付</span></button>
         <button type="button" class="kls-btn" data-act="reload">${ICONS.refresh}<span>再取得</span></button>
         <button type="button" class="kls-btn" data-act="studio">${ICONS.cards}<span>復習スタジオ</span></button>
         <button type="button" class="kls-btn" data-act="vocab-book">${ICONS.book}<span>頻出単語帳</span></button>
@@ -856,11 +902,11 @@
       </div>
       <div class="kls-lines">${linesHtml}</div>
       <div class="kls-lrc-modal${state.showLrcBox ? "" : " kls-hidden"}">
-        <div class="kls-status-text">LRC形式（[00:12.30] 가사）または韓国語テキストを貼り付けて適用します。</div>
+        <div class="kls-status-text">LRC形式（[00:12.30] 텍스트）または韓国語テキストを貼り付けて適用します。</div>
         <textarea class="kls-textarea" data-kls-lrc-input placeholder="[00:38.00] 이번엔 정말 좋아해"></textarea>
         <div style="display:flex;justify-content:flex-end;gap:6px;">
           <button type="button" class="kls-btn" data-act="cancel-lrc">閉じる</button>
-          <button type="button" class="kls-btn is-primary" data-act="apply-lrc">歌詞を適用</button>
+          <button type="button" class="kls-btn is-primary" data-act="apply-lrc">テキストを適用</button>
         </div>
       </div>
     `;
@@ -1160,6 +1206,7 @@
     state.offsetSec = 0;
     state.translationNote = "";
     state.vocabRecordNote = "";
+    state.newlyRecordedVideoId = "";
     if (!state.meta.videoId) {
       state.sourceLabel = "再生待ち";
       applyCuesWithOffset();
@@ -1335,6 +1382,289 @@
     }
   }
 
+  // ---- Quiet background word recording from thumbnails (YouTube Home / Related) ----
+  let quickFetchQueue = Promise.resolve();
+  let quickScanTimer = null;
+  let quickObserver = null;
+
+  function isVideoRecorded(videoId, storeOverride) {
+    const vid = String(videoId || "").trim();
+    if (!vid) return false;
+    const store = storeOverride || state.vocabLog;
+    return Boolean(store && store.videos && store.videos[vid]);
+  }
+
+  function withJson3Param(baseUrl) {
+    const u = new URL(baseUrl, location.href);
+    u.searchParams.set("fmt", "json3");
+    return u.toString();
+  }
+
+  async function fetchVideoCaptionsQuietly(videoId, fallbackMeta) {
+    if (typeof root.__KLS_QUICK_FETCH__ === "function") {
+      return root.__KLS_QUICK_FETCH__(videoId, fallbackMeta);
+    }
+    const resp = await fetch("/youtubei/v1/player?prettyPrint=false", {
+      method: "POST",
+      credentials: "omit",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        context: { client: { clientName: "ANDROID", clientVersion: "20.10.38", hl: "ko" } },
+        videoId
+      })
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    const vd = (data && data.videoDetails) || {};
+    const meta = {
+      isMusic: false,
+      videoId,
+      title: vd.title || (fallbackMeta && fallbackMeta.title) || videoId,
+      author: vd.author || (fallbackMeta && fallbackMeta.author) || "",
+      channelId: vd.channelId || ""
+    };
+    const tracks = (data && data.captions && data.captions.playerCaptionsTracklistRenderer && data.captions.playerCaptionsTracklistRenderer.captionTracks) || [];
+    const koTrack =
+      tracks.find((t) => String(t.languageCode || "").startsWith("ko") && t.kind !== "asr") ||
+      tracks.find((t) => String(t.languageCode || "").startsWith("ko"));
+    const jaTrack =
+      tracks.find((t) => String(t.languageCode || "").startsWith("ja") && t.kind !== "asr") ||
+      tracks.find((t) => String(t.languageCode || "").startsWith("ja"));
+
+    if (koTrack && koTrack.baseUrl) {
+      const koRes = await fetch(withJson3Param(koTrack.baseUrl), { credentials: "omit" });
+      if (koRes.ok) {
+        const koJson = await koRes.json();
+        let jaJson = null;
+        if (jaTrack && jaTrack.baseUrl) {
+          try {
+            const jaRes = await fetch(withJson3Param(jaTrack.baseUrl), { credentials: "omit" });
+            if (jaRes.ok) jaJson = await jaRes.json();
+          } catch (_) {}
+        }
+        const cues = cuesFromCaptionPair(koJson, jaJson);
+        if (cues.length) return { meta, cues };
+      }
+    }
+
+    const dur = Number(vd.lengthSeconds) || 0;
+    if (looksLikeSongTitle(meta.title) || /[\uAC00-\uD7A3]/.test(meta.title)) {
+      const queries = [
+        Hangul.cleanTrackQuery(meta.title, meta.author),
+        Hangul.cleanTrackQuery(meta.title, "")
+      ].filter((q, i, arr) => q && arr.indexOf(q) === i);
+      for (const query of queries) {
+        const lrcResp = await sendBg({ type: "kls:fetch-lrclib", query, duration: dur });
+        const lengthOk = dur > 0 && lrcResp && Number(lrcResp.duration) > 0 && Math.abs(Number(lrcResp.duration) - dur) <= 15;
+        if (lrcResp && lrcResp.ok && (looksLikeSongTitle(meta.title) || lengthOk)) {
+          if (lrcResp.syncedLyrics) {
+            const parsed = Hangul.parseLrc(lrcResp.syncedLyrics);
+            if (parsed.length) return { meta, cues: parsed };
+          }
+          if (lrcResp.plainLyrics) {
+            const lines = lrcResp.plainLyrics.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+            const step = (dur || lines.length * 4) / Math.max(1, lines.length);
+            const cues = lines.map((line, i) => ({
+              id: i,
+              start: Number((i * step).toFixed(2)),
+              end: Number(((i + 1) * step).toFixed(2)),
+              ko: line,
+              ja: ""
+            }));
+            if (cues.length) return { meta, cues };
+          }
+        }
+      }
+    }
+    return { meta, cues: [] };
+  }
+
+  function quickRecordVideo(videoId, fallbackMeta) {
+    const vid = String(videoId || "").trim();
+    if (!vid || !VocabLog) return Promise.resolve({ status: "invalid" });
+    if (isVideoRecorded(vid)) return Promise.resolve({ status: "already_recorded" });
+    if (state.quickStatus[vid] === "loading") return Promise.resolve({ status: "loading" });
+
+    state.quickStatus[vid] = "loading";
+    refreshThumbButtons();
+    if (state.meta.videoId === vid) renderLauncher();
+
+    const task = async () => {
+      try {
+        const latest = await storageGet(["vocabLog"]);
+        const latestStore = VocabLog.normalizeStore(latest.vocabLog || state.vocabLog);
+        state.vocabLog = latestStore;
+        if (isVideoRecorded(vid, latestStore)) {
+          delete state.quickStatus[vid];
+          refreshThumbButtons();
+          if (state.meta.videoId === vid) renderLauncher();
+          return { status: "already_recorded" };
+        }
+
+        const fetched = await fetchVideoCaptionsQuietly(vid, fallbackMeta);
+        const cues = (fetched && fetched.cues) || [];
+        const meta = { isMusic: false, videoId: vid, ...((fetched && fetched.meta) || fallbackMeta || {}) };
+        if (!cues.length || !VocabLog.isKoreanContent(cues)) {
+          state.quickStatus[vid] = "empty";
+          refreshThumbButtons();
+          if (state.meta.videoId === vid) renderLauncher();
+          return { status: "empty" };
+        }
+
+        let recordedResult = null;
+        await (vocabRecordQueue = vocabRecordQueue.then(async () => {
+          const curLatest = await storageGet(["vocabLog"]);
+          const baseStore = VocabLog.normalizeStore(curLatest.vocabLog || state.vocabLog);
+          const res = VocabLog.recordVideo(baseStore, meta, cues);
+          state.vocabLog = res.store;
+          if (res.added) {
+            await storageSet({ vocabLog: res.store });
+          }
+          recordedResult = res;
+        }).catch(() => {}));
+
+        delete state.quickStatus[vid];
+        refreshThumbButtons();
+        if (state.meta.videoId === vid) {
+          if (recordedResult && recordedResult.added) {
+            state.vocabRecordNote = `単語帳記録 +${recordedResult.uniqueWords}語`;
+          }
+          renderLauncher();
+          if (state.dockEl) renderDock();
+        }
+        return { status: recordedResult && recordedResult.added ? "recorded" : "already_recorded" };
+      } catch (_) {
+        state.quickStatus[vid] = "error";
+        refreshThumbButtons();
+        if (state.meta.videoId === vid) renderLauncher();
+        return { status: "error" };
+      }
+    };
+
+    quickFetchQueue = quickFetchQueue.then(task, task);
+    return quickFetchQueue;
+  }
+
+  function extractThumbMeta(host) {
+    const link =
+      host.querySelector('a[href*="/watch?v="]') ||
+      host.closest('a[href*="/watch?v="]') ||
+      host.parentElement?.querySelector('a[href*="/watch?v="]');
+    if (!link) return null;
+    let vid = "";
+    try {
+      const u = new URL(link.getAttribute("href") || link.href, location.href);
+      vid = u.searchParams.get("v") || "";
+    } catch (_) {}
+    if (!vid) return null;
+    const card = host.closest("ytd-rich-item-renderer, ytd-compact-video-renderer, ytd-video-renderer, ytd-grid-video-renderer, yt-lockup-view-model, .kls-mock-card") || host.parentElement;
+    const titleEl = card && card.querySelector("#video-title, h3 a, .yt-lockup-metadata-view-model__title, [data-kls-title]");
+    const authorEl = card && card.querySelector("#channel-name a, ytd-channel-name a, .yt-content-metadata-view-model__metadata-text");
+    return {
+      videoId: vid,
+      title: (titleEl && titleEl.textContent ? titleEl.textContent.trim() : "") || link.getAttribute("title") || "",
+      author: authorEl && authorEl.textContent ? authorEl.textContent.trim() : ""
+    };
+  }
+
+  function applyThumbButtonState(btn, vid) {
+    const recorded = isVideoRecorded(vid);
+    const st = state.quickStatus[vid] || "";
+    btn.classList.remove("is-recorded", "is-loading", "is-empty");
+    if (recorded) {
+      btn.classList.add("is-recorded");
+      btn.innerHTML = ICONS.check;
+      btn.title = "記録済み";
+      btn.setAttribute("aria-label", "単語帳に記録済み");
+    } else if (st === "loading") {
+      btn.classList.add("is-loading");
+      btn.innerHTML = ICONS.spinner;
+      btn.title = "単語を記録中";
+      btn.setAttribute("aria-label", "単語を記録中");
+    } else if (st === "empty") {
+      btn.classList.add("is-empty");
+      btn.innerHTML = ICONS.minus;
+      btn.title = "韓国語字幕なし";
+      btn.setAttribute("aria-label", "韓国語字幕なし");
+    } else {
+      btn.innerHTML = ICONS.plus;
+      btn.title = st === "error" ? "再試行して単語を記録" : "開かずに単語を記録";
+      btn.setAttribute("aria-label", "開かずに単語を記録");
+    }
+  }
+
+  function scanQuickRecordThumbnails() {
+    const allowedSite = location.hostname === "www.youtube.com" || Boolean(root.__KLS_ALLOW_QUICK_SCAN__);
+    if (!allowedSite || !state.settings.enabled || state.settings.showQuickRecord === false) {
+      document.querySelectorAll(".kls-thumb-rec").forEach((el) => el.remove());
+      return;
+    }
+    const hosts = document.querySelectorAll("ytd-thumbnail, yt-thumbnail-view-model, .kls-thumb-host");
+    hosts.forEach((host) => {
+      if (host.closest("#movie_player, .kls-dock, ytd-reel-item-renderer, ytd-shorts")) return;
+      const meta = extractThumbMeta(host);
+      const existing = host.querySelector(":scope > .kls-thumb-rec");
+      if (!meta || !meta.videoId) {
+        if (existing) existing.remove();
+        return;
+      }
+      if (getComputedStyle(host).position === "static") {
+        host.style.position = "relative";
+      }
+      let btn = existing;
+      if (!btn || btn.dataset.klsVid !== meta.videoId) {
+        if (existing) existing.remove();
+        btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "kls-thumb-rec";
+        btn.dataset.klsVid = meta.videoId;
+        const stop = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (typeof e.stopImmediatePropagation === "function") e.stopImmediatePropagation();
+        };
+        btn.addEventListener("pointerdown", stop);
+        btn.addEventListener("mousedown", stop);
+        btn.addEventListener("click", (e) => {
+          stop(e);
+          const vid = btn.dataset.klsVid || "";
+          if (!vid || isVideoRecorded(vid) || state.quickStatus[vid] === "loading" || state.quickStatus[vid] === "empty") {
+            return;
+          }
+          quickRecordVideo(vid, extractThumbMeta(host) || meta);
+        });
+        host.appendChild(btn);
+      }
+      applyThumbButtonState(btn, meta.videoId);
+    });
+  }
+
+  function refreshThumbButtons() {
+    document.querySelectorAll(".kls-thumb-rec").forEach((btn) => {
+      const vid = btn.dataset.klsVid || "";
+      if (vid) applyThumbButtonState(btn, vid);
+    });
+  }
+
+  function setupQuickRecordObserver() {
+    const allowedSite = location.hostname === "www.youtube.com" || Boolean(root.__KLS_ALLOW_QUICK_SCAN__);
+    if (!allowedSite || quickObserver) return;
+    const schedule = () => {
+      if (quickScanTimer) clearTimeout(quickScanTimer);
+      quickScanTimer = setTimeout(() => {
+        quickScanTimer = null;
+        scanQuickRecordThumbnails();
+      }, 300);
+    };
+    if (typeof MutationObserver === "function" && document.body) {
+      quickObserver = new MutationObserver(schedule);
+      quickObserver.observe(document.body, { childList: true, subtree: true });
+    }
+    window.addEventListener("yt-navigate-finish", () => setTimeout(scanQuickRecordThumbnails, 400));
+    setInterval(scanQuickRecordThumbnails, 2000);
+    scanQuickRecordThumbnails();
+  }
+
   async function init(initialMeta) {
     const stored = await storageGet(["settings", "savedCards", "vocabLog", "dockCollapsed", "activation"]);
     state.dockCollapsed = Boolean(stored.dockCollapsed);
@@ -1348,6 +1678,7 @@
     attachVideoListener();
     renderDock();
     renderLauncher();
+    setupQuickRecordObserver();
 
     window.addEventListener("message", (event) => {
       if (event.source !== window || !event.data) return;
@@ -1385,11 +1716,17 @@
             if (state.rawCues.length) recordCurrentVideoVocab();
             else if (state.settings.enabled && !prevEnabled) loadSubtitlesForMeta(false);
           }
+          scanQuickRecordThumbnails();
+          renderLauncher();
           renderDock();
           syncToCurrentTime();
         }
         if (changes.vocabLog) {
           state.vocabLog = VocabLog ? VocabLog.normalizeStore(changes.vocabLog.newValue) : null;
+          refreshThumbButtons();
+          renderLauncher();
+          renderDock();
+          syncToCurrentTime();
         }
         if (changes.savedCards && changes.savedCards.newValue) {
           state.savedCards = changes.savedCards.newValue;
