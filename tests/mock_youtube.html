@@ -108,6 +108,27 @@
       font-size: 13px;
       font-weight: 600;
     }
+    .mock-rel-meta {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 6px;
+      min-width: 0;
+    }
+    .mock-rel-text {
+      flex: 1;
+      min-width: 0;
+    }
+    .ytLockupMetadataViewModelMenuButton {
+      flex: none;
+      width: 24px;
+      height: 24px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: #606060;
+      font-size: 14px;
+    }
   </style>
 </head>
 <body>
@@ -136,18 +157,24 @@
           <yt-thumbnail-view-model class="mock-rel-thumb">
             <a href="https://www.youtube.com/watch?v=quick_new_1">Thumbnail 1</a>
           </yt-thumbnail-view-model>
-          <div>
-            <div class="mock-rel-title" data-kls-title>ILLIT Vlog 単語テスト</div>
-            <div class="ch" style="font-size:11px;color:#606060;">ILLIT</div>
+          <div class="mock-rel-meta">
+            <div class="mock-rel-text">
+              <div class="mock-rel-title" data-kls-title>ILLIT Vlog 単語テスト</div>
+              <div class="ch" style="font-size:11px;color:#606060;">ILLIT</div>
+            </div>
+            <div class="ytLockupMetadataViewModelMenuButton" aria-label="メニュー">⋮</div>
           </div>
         </div>
         <div class="mock-rel-card kls-mock-card">
           <ytd-thumbnail class="mock-rel-thumb">
             <a href="https://www.youtube.com/watch?v=quick_done_1">Thumbnail 2</a>
           </ytd-thumbnail>
-          <div>
-            <div class="mock-rel-title" data-kls-title>ILLIT 記録済みテスト</div>
-            <div class="ch" style="font-size:11px;color:#606060;">ILLIT</div>
+          <div class="mock-rel-meta">
+            <div class="mock-rel-text">
+              <div class="mock-rel-title" data-kls-title>ILLIT 記録済みテスト</div>
+              <div class="ch" style="font-size:11px;color:#606060;">ILLIT</div>
+            </div>
+            <div class="ytLockupMetadataViewModelMenuButton" aria-label="メニュー">⋮</div>
           </div>
         </div>
       </div>
@@ -173,6 +200,24 @@
         ]
       };
     };
+    if (!localStorage.getItem("kls:savedCards")) {
+      localStorage.setItem("kls:savedCards", JSON.stringify({
+        "좋아해": {
+          id: "card-좋아해", surface: "좋아해", lemma: "좋아하다", pos: "動詞 + 語尾", meaning: "好きだ",
+          pronouncedHangul: "조아해", katakana: "ジョアヘ", romanized: "jo-a-hae",
+          context: "이번엔 정말 좋아해", jaContext: "今度は本当に好きだよ",
+          sourceTitle: "K-POP スターター表現", sourceUrl: "", timestampSec: 38,
+          reps: 3, intervalDays: 6, ease: 2.5, lapses: 0, streak: 3, mastered: true, dueAt: Date.now() + 86400000
+        },
+        "같이": {
+          id: "card-같이", surface: "같이", lemma: "같이", pos: "副詞", meaning: "一緒に",
+          pronouncedHangul: "가치", katakana: "カチ", romanized: "ga-chi",
+          context: "우리 같이 있으면 어떡해", jaContext: "私たちが一緒にいたらどうしよう",
+          sourceTitle: "K-POP スターター表現", sourceUrl: "", timestampSec: 47,
+          reps: 0, intervalDays: 0, ease: 2.5, lapses: 0, streak: 0, mastered: false, dueAt: 0
+        }
+      }));
+    }
     if (!localStorage.getItem("kls:vocabLog")) {
       localStorage.setItem("kls:vocabLog", JSON.stringify({
         version: 1,
@@ -182,9 +227,9 @@
             title: "ILLIT 記録済みテスト",
             site: "youtube",
             recordedAt: 1000,
-            uniqueWords: 2,
-            wordKeys: ["오늘", "연습"],
-            wordCounts: { "오늘": 1, "연습": 1 }
+            uniqueWords: 3,
+            wordKeys: ["오늘", "연습", "정말"],
+            wordCounts: { "오늘": 1, "연습": 1, "정말": 1 }
           }
         },
         words: {
@@ -195,8 +240,13 @@
           },
           "연습": {
             key: "연습", lemma: "연습", surfaceSample: "연습", meaning: "練習", pos: "名詞",
-            videoCount: 1, totalCount: 1, lastSeenAt: 1000,
+            videoCount: 5, totalCount: 8, lastSeenAt: 1000,
             occurrences: [{ videoId: "quick_done_1", title: "ILLIT 記録済みテスト", isMusic: false, sec: 10, url: "https://www.youtube.com/watch?v=quick_done_1&t=10s", surface: "연습", context: "오늘 연습" }]
+          },
+          "정말": {
+            key: "정말", lemma: "정말", surfaceSample: "정말", meaning: "本当に", pos: "副詞",
+            videoCount: 10, totalCount: 22, lastSeenAt: 1000,
+            occurrences: [{ videoId: "quick_done_1", title: "ILLIT 記録済みテスト", isMusic: false, sec: 10, url: "https://www.youtube.com/watch?v=quick_done_1&t=10s", surface: "정말", context: "정말 좋아해" }]
           }
         }
       }));

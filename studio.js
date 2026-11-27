@@ -284,7 +284,7 @@
     const listEl = document.getElementById("freq-word-list");
     listEl.innerHTML = "";
     if (!rows.length) {
-      listEl.innerHTML = `<div class="kls-muted">${allWords.length ? "条件に一致する単語がありません。" : "まだ動画からの記録がありません。YouTube（字幕ON・サムネイルの＋ボタン）または YouTube Music で韓国語の動画・曲を扱うと自動でここに溜まります。"}</div>`;
+      listEl.innerHTML = `<div class="kls-muted">${allWords.length ? "条件に一致する単語がありません。" : "まだ動画からの記録がありません。YouTube（字幕ON・動画の＋ボタン）または YouTube Music で韓国語の動画・曲を扱うと自動でここに溜まります。"}</div>`;
     } else {
       for (const w of rows.slice(0, 200)) {
         const cardLike = { surface: w.key };

@@ -391,3 +391,46 @@ test("computeVocabularyStats distinguishes known, learning, seen (vocabLog), and
   assert.equal(rewatch.unseen, 0);
   assert.equal(rewatch.seenPct, 50);
 });
+
+test("getWordMarker and aligned renderLine mark known/learning/seen (with intensity) and leave unseen plain", () => {
+  const saved = {
+    "설레잖아": { surface: "설레잖아", mastered: true },
+    "같이": { surface: "같이", mastered: false }
+  };
+  const vocabLog = {
+    version: 1,
+    videos: {
+      "cur": { videoId: "cur", wordCounts: { "오늘": 1, "만나": 1 } }
+    },
+    words: {
+      "오늘": { key: "오늘", videoCount: 2 },
+      "연습": { key: "연습", videoCount: 4 },
+      "정말": { key: "정말", videoCount: 10 },
+      "만나": { key: "만나", videoCount: 1 }
+    }
+  };
+
+  assert.equal(Dict.getWordMarker("설레잖아", saved, vocabLog, "cur").status, "known");
+  assert.equal(Dict.getWordMarker("같이", saved, vocabLog, "cur").status, "learning");
+  const m1 = Dict.getWordMarker("오늘", saved, vocabLog, "cur");
+  const m4 = Dict.getWordMarker("연습", saved, vocabLog, "cur");
+  const m10 = Dict.getWordMarker("정말", saved, vocabLog, "cur");
+  assert.equal(m1.status, "seen");
+  assert.equal(m1.otherVideos, 1);
+  assert.equal(m4.status, "seen");
+  assert.equal(m4.otherVideos, 4);
+  assert.equal(m10.status, "seen");
+  assert.equal(m10.otherVideos, 10);
+  assert.ok(m1.intensity < m4.intensity && m4.intensity < m10.intensity && m10.intensity === 1);
+  // Words appearing ONLY in currentVideoId stay unseen (not marked as seen from other videos)
+  assert.equal(Dict.getWordMarker("만나", saved, vocabLog, "cur").status, "unseen");
+  assert.equal(Dict.getWordMarker("처음보는말", saved, vocabLog, "cur").status, "unseen");
+
+  const Aligned = require("../lib/aligned.js");
+  const html = Aligned.renderLine("연습 처음보는말", "hybrid", {
+    mark: (t) => (t.surface === "연습" ? { cls: "is-seen", style: `--kls-seen-t:${m4.intensity}`, title: "既出（他の4動画）" } : null)
+  });
+  assert.ok(html.includes('class="kls-al-word is-seen"'));
+  assert.ok(html.includes(`--kls-seen-t:${m4.intensity}`));
+  assert.ok(html.includes('class="kls-al-word" data-word="처음보는말"'));
+});

@@ -2,20 +2,31 @@
   if (window.__kLyricPageHookInstalled) return;
   window.__kLyricPageHookInstalled = true;
 
+  function isAdText(s) {
+    return /広告|ad\s*will\s*play|video\s*will\s*play\s*after/i.test(String(s || ""));
+  }
+
   function collectMetadata() {
     const isMusic = location.hostname === "music.youtube.com";
     let videoId = "";
     let title = "";
     let author = "";
     let channelId = "";
+    let durationSec = 0;
+    let isAd = false;
     let captionTracks = [];
 
     let stale = false;
     try {
       const player = document.getElementById("movie_player");
       let currentId = "";
+      let vd = null;
       try {
-        currentId = player?.getVideoData?.()?.video_id || "";
+        vd = player?.getVideoData?.();
+        currentId = vd?.video_id || "";
+      } catch (_) {}
+      try {
+        isAd = Boolean(vd?.isAd || player?.getAdState?.() === 1 || player?.classList?.contains("ad-showing"));
       } catch (_) {}
       if (player && typeof player.getPlayerResponse === "function") {
         const resp = player.getPlayerResponse();
@@ -28,6 +39,7 @@
           title = resp.videoDetails.title || "";
           author = resp.videoDetails.author || "";
           channelId = resp.videoDetails.channelId || "";
+          durationSec = Number(resp.videoDetails.lengthSeconds) || 0;
         }
         const tracks = stale ? null : resp?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
         if (Array.isArray(tracks)) {
@@ -38,6 +50,10 @@
             name: t.name?.simpleText || t.name?.runs?.map((r) => r.text).join("") || t.languageCode
           }));
         }
+      }
+      if (!durationSec && player && typeof player.getDuration === "function") {
+        const d = Number(player.getDuration());
+        if (Number.isFinite(d) && d > 20) durationSec = Math.round(d);
       }
     } catch (_) {
       // Ignore cross-frame or unready player errors
@@ -58,25 +74,36 @@
       videoId = sp.get("v") || "";
     }
 
-    if (!title && isMusic) {
+    if (isMusic) {
       const titleEl = document.querySelector("ytmusic-player-bar .title");
       const subEl = document.querySelector("ytmusic-player-bar .byline");
-      title = titleEl?.textContent?.trim() || document.title.replace(/\s*-\s*YouTube Music$/, "").trim();
-      author = subEl?.textContent?.split("•")[0]?.trim() || "";
+      const barTitle = titleEl?.textContent?.trim() || "";
+      const barAuthor = subEl?.textContent?.split("•")[0]?.trim() || "";
+      if (!title && barTitle && !isAdText(barTitle)) {
+        title = barTitle;
+      }
+      if (!title) {
+        const docTitle = document.title.replace(/\s*-\s*YouTube Music$/, "").trim();
+        if (docTitle && docTitle !== "YouTube Music" && !isAdText(docTitle)) title = docTitle;
+      }
+      if (!author && barAuthor && !isAdText(barAuthor)) {
+        author = barAuthor;
+      }
     }
 
-    if (!title) {
+    if (!title && !isMusic) {
       const h1 = document.querySelector("h1.ytd-watch-metadata yt-formatted-string, #title h1");
       title = h1?.textContent?.trim() || document.title.replace(/\s*-\s*YouTube$/, "").trim();
     }
 
-    if (!author) {
+    if (!author && !isMusic) {
       const ch = document.querySelector("#owner #channel-name a, ytd-channel-name a");
       author = ch?.textContent?.trim() || "";
     }
 
     return {
       stale,
+      isAd,
       source: "kls-page-hook",
       isMusic,
       url: location.href,
@@ -84,11 +111,16 @@
       title,
       author,
       channelId,
+      durationSec,
       captionTracks
     };
   }
 
-  let lastEmittedId = null;
+  let lastEmittedSig = "";
+
+  function metaSig(meta) {
+    return `${meta.videoId}|${meta.title}|${meta.author}|${meta.captionTracks.length}|${meta.durationSec}`;
+  }
 
   function emit(attempt = 0) {
     const meta = collectMetadata();
@@ -96,22 +128,32 @@
       setTimeout(() => emit(attempt + 1), 500);
       return;
     }
-    lastEmittedId = meta.videoId;
+    lastEmittedSig = metaSig(meta);
     window.postMessage(meta, "*");
   }
 
   // YouTube Music changes songs (queue, autoplay, next button, clicks from home) without
-  // firing yt-navigate-finish, so watch the player's current video id directly.
+  // firing yt-navigate-finish, and metadata/tracks can arrive slightly after the video_id.
   setInterval(() => {
-    let id = "";
-    try {
-      id = document.getElementById("movie_player")?.getVideoData?.()?.video_id || "";
-    } catch (_) {}
-    if (id && id !== lastEmittedId) {
-      lastEmittedId = id;
-      setTimeout(() => emit(0), 400);
+    const meta = collectMetadata();
+    if (!meta.videoId || meta.stale) return;
+    if (meta.isAd && !meta.title) return;
+    const sig = metaSig(meta);
+    if (sig !== lastEmittedSig) {
+      lastEmittedSig = sig;
+      setTimeout(() => emit(0), 250);
     }
   }, 1000);
+
+  function bindVideoHooks() {
+    const v = document.querySelector("#movie_player video, video.html5-main-video, video");
+    if (!v || v.__klsHooked) return;
+    v.__klsHooked = true;
+    v.addEventListener("loadedmetadata", () => setTimeout(() => emit(0), 300));
+    v.addEventListener("emptied", () => setTimeout(() => emit(0), 500));
+  }
+  setInterval(bindVideoHooks, 2000);
+  bindVideoHooks();
 
   window.addEventListener("message", (event) => {
     if (event.source !== window) return;

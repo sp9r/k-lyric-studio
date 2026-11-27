@@ -57,6 +57,35 @@ def run_e2e() -> None:
             assert "-".join(c["roman"] for c in cols) == "seol-le-ja-na", cols
             assert all(c["stacked"] and c["centerDiff"] < 1 for c in cols), f"Readings not stacked/centered under syllables: {cols}"
 
+            # Check known / learning / seen (gradient) / unseen (plain) markers in both overlay and dock
+            ov_mark = page.evaluate("""() => {
+                const v = document.getElementById("mock-video");
+                const prevT = v.currentTime;
+                v.currentTime = 39.0;
+                window.KLyricContent.syncToCurrentTime();
+                const btn = (w) => document.querySelector(`.kls-word-btn[data-word="${w}"]`);
+                const dockWord = (w) => document.querySelector(`.kls-dock .kls-al-word[data-word="${w}"]`);
+                const res = {
+                    ovKnown: btn("좋아해")?.classList.contains("is-known"),
+                    ovSeen: btn("정말")?.classList.contains("is-seen"),
+                    ovSeenStyle: btn("정말")?.getAttribute("style") || "",
+                    dockKnown: dockWord("좋아해")?.classList.contains("is-known"),
+                    dockLearning: dockWord("같이")?.classList.contains("is-learning"),
+                    dockSeen1: dockWord("오늘")?.style.getPropertyValue("--kls-seen-t"),
+                    dockSeen5: dockWord("연습")?.style.getPropertyValue("--kls-seen-t"),
+                    dockSeen10: dockWord("정말")?.style.getPropertyValue("--kls-seen-t"),
+                    dockUnseenCls: dockWord("힘들었어")?.className || ""
+                };
+                v.currentTime = prevT;
+                window.KLyricContent.syncToCurrentTime();
+                return res;
+            }""")
+            assert ov_mark["ovKnown"] is True and ov_mark["ovSeen"] is True, ov_mark
+            assert "--kls-seen-t:1" in ov_mark["ovSeenStyle"], ov_mark
+            assert ov_mark["dockKnown"] is True and ov_mark["dockLearning"] is True, ov_mark
+            assert float(ov_mark["dockSeen1"]) < float(ov_mark["dockSeen5"]) < float(ov_mark["dockSeen10"]), ov_mark
+            assert "is-known" not in ov_mark["dockUnseenCls"] and "is-learning" not in ov_mark["dockUnseenCls"] and "is-seen" not in ov_mark["dockUnseenCls"], ov_mark
+
             # Click word to open analysis popover and save card
             page.locator('.kls-word-btn[data-word="설레잖아"]').click()
             page.wait_for_selector(".kls-popover:not(.kls-hidden)")
@@ -95,18 +124,20 @@ def run_e2e() -> None:
             assert "語彙カバー" in cov_text and "既知" in cov_text and "学習中" in cov_text and "既出" in cov_text and "新出" in cov_text, cov_text
             assert page.locator(".kls-cov-bar .kls-cov-seen").count() == 1
 
-            # Quick-record thumbnail buttons: pre-recorded skips fetch, unrecorded records quietly without navigating
-            page.wait_for_selector('.kls-thumb-rec[data-kls-vid="quick_done_1"].is-recorded', state="attached")
-            page.wait_for_selector('.kls-thumb-rec[data-kls-vid="quick_new_1"]:not(.is-recorded)', state="attached")
-            page.locator('.kls-thumb-rec[data-kls-vid="quick_done_1"]').click(force=True)
+            # Quick-record card-menu buttons: sit outside <a> and thumbnail, normal click works without force=True
+            page.wait_for_selector('.kls-card-rec[data-kls-vid="quick_done_1"].is-recorded')
+            page.wait_for_selector('.kls-card-rec[data-kls-vid="quick_new_1"]:not(.is-recorded)')
+            outside_ok = page.evaluate("""() => [...document.querySelectorAll('.kls-card-rec')].every(b => !b.closest('a, ytd-thumbnail, yt-thumbnail-view-model'))""")
+            assert outside_ok, "Quick-record button must stay outside <a> and thumbnail elements"
+            page.locator('.kls-card-rec[data-kls-vid="quick_done_1"]').click()
             assert page.evaluate("window.__KLS_QUICK_CALLS__.length") == 0, "Already recorded video should skip fetch"
-            page.locator('.kls-thumb-rec[data-kls-vid="quick_new_1"]').click(force=True)
-            page.wait_for_selector('.kls-thumb-rec[data-kls-vid="quick_new_1"].is-recorded', state="attached")
+            page.locator('.kls-card-rec[data-kls-vid="quick_new_1"]').click()
+            page.wait_for_selector('.kls-card-rec[data-kls-vid="quick_new_1"].is-recorded')
             assert "mock_youtube.html" in page.url, "Quick record must not navigate away"
             assert page.evaluate("window.__KLS_QUICK_CALLS__") == ["quick_new_1"]
             assert page.evaluate("Boolean(JSON.parse(localStorage.getItem('kls:vocabLog') || '{}').videos?.quick_new_1)") is True
             # Clicking again on the newly recorded video skips duplicate fetch
-            page.locator('.kls-thumb-rec[data-kls-vid="quick_new_1"]').click(force=True)
+            page.locator('.kls-card-rec[data-kls-vid="quick_new_1"]').click()
             assert page.evaluate("window.__KLS_QUICK_CALLS__.length") == 1, "Second click on recorded video must skip"
             sent_msg = page.evaluate("""() => {
                 let captured = null;

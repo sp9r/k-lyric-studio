@@ -32,8 +32,11 @@ async function fetchLrclibLyrics(query, durationSec) {
         let score = 0;
         if (item.syncedLyrics) score += 50;
         if (hasHangul(item.syncedLyrics || item.plainLyrics)) score += 40;
-        if (durationSec && item.duration) {
-          const diff = Math.abs(Number(item.duration) - Number(durationSec));
+        const itemDur = Number(item.duration) || 0;
+        if (itemDur > 0 && itemDur < 20 && (!durationSec || durationSec >= 40)) {
+          score -= 100;
+        } else if (durationSec && itemDur) {
+          const diff = Math.abs(itemDur - Number(durationSec));
           if (diff <= 5) score += 20;
           else if (diff <= 15) score += 10;
         }

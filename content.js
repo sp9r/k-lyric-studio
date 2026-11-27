@@ -206,23 +206,20 @@
     return Boolean(analysis.lemma && state.savedCards[analysis.lemma]);
   }
 
-  function isWordSeenInLog(clean) {
-    if (!clean || !state.vocabLog || !state.vocabLog.words) return false;
-    const analysis = Dict.analyzeToken(clean);
-    const logKey = analysis.matched && analysis.lemma ? analysis.lemma : clean;
-    const lemmaKey = analysis.lemma || clean;
-    const entry = state.vocabLog.words[logKey] || state.vocabLog.words[lemmaKey] || state.vocabLog.words[clean];
-    if (!entry) return false;
-    if (state.newlyRecordedVideoId && state.newlyRecordedVideoId === state.meta.videoId) {
-      const fromNew = Boolean(
-        state.vocabLog.videos &&
-        state.vocabLog.videos[state.newlyRecordedVideoId] &&
-        state.vocabLog.videos[state.newlyRecordedVideoId].wordCounts &&
-        state.vocabLog.videos[state.newlyRecordedVideoId].wordCounts[entry.key]
-      );
-      return (Number(entry.videoCount) || 0) - (fromNew ? 1 : 0) >= 1;
+  function wordMarkerFor(rawWord) {
+    if (!Dict || typeof Dict.getWordMarker !== "function") return null;
+    const info = Dict.getWordMarker(rawWord, state.savedCards, state.vocabLog, state.meta.videoId);
+    if (!info || info.status === "unseen") return null;
+    if (info.status === "known") return { cls: "is-known", style: "", title: "既知" };
+    if (info.status === "learning") return { cls: "is-learning", style: "", title: "学習中" };
+    if (info.status === "seen") {
+      return {
+        cls: "is-seen",
+        style: `--kls-seen-t:${info.intensity}`,
+        title: `既出（他の${info.otherVideos}動画）`
+      };
     }
-    return (Number(entry.videoCount) || 0) >= 1;
+    return null;
   }
 
   function findVideoElement() {
@@ -348,7 +345,7 @@
     overlay.classList.remove("kls-hidden");
     // timeupdate fires several times a second; rebuilding the buttons each time would
     // swap them out from under a click, so only rebuild when something visible changed.
-    const renderKey = [cue.start, cue.ko, cue.ja, state.settings.showTranslation, state.settings.showHanja, state.settings.showGloss, state.glossVersion, state.settings.readingMode, state.selectedWord, Object.keys(state.savedCards).length, Object.keys((state.vocabLog && state.vocabLog.words) || {}).length, state.newlyRecordedVideoId].join("|");
+    const renderKey = [cue.start, cue.ko, cue.ja, state.settings.showTranslation, state.settings.showHanja, state.settings.showGloss, state.glossVersion, state.settings.readingMode, state.selectedWord, state.meta.videoId, Object.keys(state.savedCards).length, Object.keys((state.vocabLog && state.vocabLog.words) || {}).length, Object.keys((state.vocabLog && state.vocabLog.videos) || {}).length].join("|");
     if (renderKey === state.overlayKey && overlay.firstChild) return;
     state.overlayKey = renderKey;
     const rows = Aligned.rowsForMode(state.settings.readingMode);
@@ -357,14 +354,15 @@
       .map((token) => {
         const tok = token.surface;
         const clean = Dict.cleanHangulWord(tok);
-        const saved = isWordSaved(clean);
-        const seen = !saved && isWordSeenInLog(clean);
+        const mark = token.hasHangul ? wordMarkerFor(tok) : null;
         const active = clean && clean === state.selectedWord;
         const cls =
           "kls-word-btn" +
-          (saved ? " is-saved" : seen ? " is-seen" : "") +
+          (mark && mark.cls ? ` ${mark.cls}` : "") +
           (active ? " is-active" : "");
-        return `<button type="button" class="${cls}" data-word="${escapeHtml(tok)}">${Aligned.renderWord(token, rows, hanjaRow, glossArg(token))}</button>`;
+        const styleAttr = mark && mark.style ? ` style="${escapeHtml(mark.style)}"` : "";
+        const titleAttr = mark && mark.title ? ` title="${escapeHtml(mark.title)}"` : "";
+        return `<button type="button" class="${cls}" data-word="${escapeHtml(tok)}"${styleAttr}${titleAttr}>${Aligned.renderWord(token, rows, hanjaRow, glossArg(token))}</button>`;
       })
       .join("");
 
@@ -827,7 +825,7 @@
     dock.classList.remove("kls-hidden");
     dock.classList.toggle("is-collapsed", state.dockCollapsed);
 
-    const excludeVid = state.newlyRecordedVideoId && state.newlyRecordedVideoId === state.meta.videoId ? state.meta.videoId : "";
+    const excludeVid = state.meta.videoId || "";
     const cov = Dict.computeVocabularyStats(state.cues, state.savedCards, state.vocabLog, { excludeVideoId: excludeVid });
     const speed = SPEED_STEPS[state.speedIdx];
     const readLabel = getReadingLabel(state.settings.readingMode);
@@ -843,7 +841,7 @@
                   <span>${formatSec(c.start)}</span>
                   ${rep}
                 </div>
-                <div class="kls-line-ko" lang="ko">${Aligned.renderLine(c.ko, state.settings.readingMode, { ja: c.ja, hanja: state.settings.showHanja !== false, gloss: state.settings.showGloss !== false ? glossOf : null })}</div>
+                <div class="kls-line-ko" lang="ko">${Aligned.renderLine(c.ko, state.settings.readingMode, { ja: c.ja, hanja: state.settings.showHanja !== false, gloss: state.settings.showGloss !== false ? glossOf : null, mark: (t) => wordMarkerFor(t.surface) })}</div>
                 ${c.ja && state.settings.showTranslation ? `<div class="kls-line-ja" lang="ja">${escapeHtml(c.ja)}</div>` : ""}
               </button>
             `;
@@ -1094,6 +1092,18 @@
     if (Math.abs(list.scrollTop - target) > 1) list.scrollTop = target;
   }
 
+  function isActualAdPlaying(v) {
+    const playerEl = document.getElementById("movie_player");
+    if (!playerEl || !playerEl.classList.contains("ad-showing")) return false;
+    // Ad blockers can skip/hide an ad while leaving .ad-showing or brief state behind;
+    // if the <video> duration already matches the known track length, it is playing the main track.
+    const metaDur = Number(state.meta.durationSec) || 0;
+    if (metaDur >= 30 && v && Number.isFinite(v.duration) && v.duration > 0 && Math.abs(v.duration - metaDur) <= 12) {
+      return false;
+    }
+    return true;
+  }
+
   function syncToCurrentTime() {
     const v = state.videoEl || findVideoElement();
     if (!v || !state.cues.length || !isActive()) {
@@ -1101,8 +1111,7 @@
       return;
     }
     // While an ad plays, the <video> time belongs to the ad, not the song.
-    const playerEl = document.getElementById("movie_player");
-    if (playerEl && playerEl.classList.contains("ad-showing")) {
+    if (isActualAdPlaying(v)) {
       renderOverlay(null);
       return;
     }
@@ -1152,11 +1161,14 @@
       state.videoEl = v;
       v.addEventListener("timeupdate", syncToCurrentTime);
       v.addEventListener("seeked", syncToCurrentTime);
+      v.addEventListener("loadedmetadata", syncToCurrentTime);
+      v.addEventListener("playing", syncToCurrentTime);
       v.addEventListener("play", () => {
         if (state.autoPausedCueIdx === state.activeCueIdx) {
           // Allow advancing into next cue cleanly
           state.autoPausedCueIdx = -2;
         }
+        syncToCurrentTime();
       });
     }
   }
@@ -1195,7 +1207,7 @@
     // Whether the track list was known is part of the key: the first page message can come
     // before the player has its captions, and the later one must still load them.
     const hasTracks = Array.isArray(state.meta.captionTracks) && state.meta.captionTracks.length > 0;
-    const key = `${state.meta.videoId}|${state.meta.title}|${hasTracks ? 1 : 0}`;
+    const key = `${state.meta.videoId}|${state.meta.title}|${state.meta.author}|${hasTracks ? 1 : 0}`;
     if (!force && key === state.lastLoadedKey) return;
     state.lastLoadedKey = key;
     const seq = ++state.loadSeq;
@@ -1259,6 +1271,38 @@
         }
       }
     }
+
+    // 1a-fast. Same-origin InnerTube player works on both youtube.com and music.youtube.com
+    // without waiting on ad blockers / hidden player caption toggling, and also fills exact
+    // title/author/durationSec when the bar/player was still showing an ad or stale info.
+    if (location.hostname === "www.youtube.com" || location.hostname === "music.youtube.com") {
+      try {
+        const fast = await fetchInnerTubePlayer(state.meta.videoId, state.meta);
+        if (stale()) return;
+        if (fast && fast.meta) {
+          if (fast.meta.title && (!state.meta.title || /広告|ad\s*will\s*play/i.test(state.meta.title))) {
+            state.meta.title = fast.meta.title;
+          }
+          if (fast.meta.author && (!state.meta.author || /広告|ad\s*will\s*play/i.test(state.meta.author))) {
+            state.meta.author = fast.meta.author;
+          }
+          if (fast.meta.durationSec > 0 && !state.meta.durationSec) {
+            state.meta.durationSec = fast.meta.durationSec;
+          }
+        }
+        if (fast && Array.isArray(fast.cues) && fast.cues.length) {
+          state.rawCues = fast.cues;
+          state.offsetSec = 0;
+          state.sourceLabel = "YouTube字幕";
+          applyCuesWithOffset();
+          recordCurrentVideoVocab();
+          translateMissing(seq);
+          fillGlosses(seq);
+          return;
+        }
+      } catch (_) {}
+    }
+
     if (tryPlayer) {
       // 1b. Direct download was refused: let the player fetch them. Ads and a slow player can
       // make one try fail, so try a few times before falling back to lyrics.
@@ -1292,13 +1336,17 @@
     // 2. Try LRCLIB synced lyrics using cleaned title & author
     // The channel name helps for "Topic" channels but hurts for label channels (HYBE LABELS etc.),
     // so fall back to the title alone.
+    const latinNoHangul = String(state.meta.title || "").replace(/[\uAC00-\uD7A3]+/g, " ").replace(/\s+/g, " ").trim();
     const queries = [
       Hangul.cleanTrackQuery(state.meta.title, state.meta.author),
-      Hangul.cleanTrackQuery(state.meta.title, "")
+      Hangul.cleanTrackQuery(state.meta.title, ""),
+      latinNoHangul && latinNoHangul !== state.meta.title ? Hangul.cleanTrackQuery(latinNoHangul, state.meta.author) : ""
     ].filter((q, i, arr) => q && arr.indexOf(q) === i);
     let plainFallbackLyrics = "";
+    const dur =
+      (Number(state.meta.durationSec) > 0 ? Number(state.meta.durationSec) : 0) ||
+      (state.videoEl && !isActualAdPlaying(state.videoEl) && Number.isFinite(state.videoEl.duration) ? state.videoEl.duration : 0);
     for (const query of queries) {
-      const dur = state.videoEl && state.videoEl.duration ? state.videoEl.duration : 0;
       const lrcResp = await sendBg({ type: "kls:fetch-lrclib", query, duration: dur });
       if (stale()) return;
       // On regular YouTube many videos are not songs (vlogs, variety shows). Only trust a
@@ -1400,10 +1448,7 @@
     return u.toString();
   }
 
-  async function fetchVideoCaptionsQuietly(videoId, fallbackMeta) {
-    if (typeof root.__KLS_QUICK_FETCH__ === "function") {
-      return root.__KLS_QUICK_FETCH__(videoId, fallbackMeta);
-    }
+  async function fetchInnerTubePlayer(videoId, fallbackMeta) {
     const resp = await fetch("/youtubei/v1/player?prettyPrint=false", {
       method: "POST",
       credentials: "omit",
@@ -1417,11 +1462,12 @@
     const data = await resp.json();
     const vd = (data && data.videoDetails) || {};
     const meta = {
-      isMusic: false,
+      isMusic: location.hostname === "music.youtube.com",
       videoId,
       title: vd.title || (fallbackMeta && fallbackMeta.title) || videoId,
       author: vd.author || (fallbackMeta && fallbackMeta.author) || "",
-      channelId: vd.channelId || ""
+      channelId: vd.channelId || "",
+      durationSec: Number(vd.lengthSeconds) || 0
     };
     const tracks = (data && data.captions && data.captions.playerCaptionsTracklistRenderer && data.captions.playerCaptionsTracklistRenderer.captionTracks) || [];
     const koTrack =
@@ -1431,6 +1477,7 @@
       tracks.find((t) => String(t.languageCode || "").startsWith("ja") && t.kind !== "asr") ||
       tracks.find((t) => String(t.languageCode || "").startsWith("ja"));
 
+    let cues = [];
     if (koTrack && koTrack.baseUrl) {
       const koRes = await fetch(withJson3Param(koTrack.baseUrl), { credentials: "omit" });
       if (koRes.ok) {
@@ -1442,12 +1489,20 @@
             if (jaRes.ok) jaJson = await jaRes.json();
           } catch (_) {}
         }
-        const cues = cuesFromCaptionPair(koJson, jaJson);
-        if (cues.length) return { meta, cues };
+        cues = cuesFromCaptionPair(koJson, jaJson);
       }
     }
+    return { meta, cues };
+  }
 
-    const dur = Number(vd.lengthSeconds) || 0;
+  async function fetchVideoCaptionsQuietly(videoId, fallbackMeta) {
+    if (typeof root.__KLS_QUICK_FETCH__ === "function") {
+      return root.__KLS_QUICK_FETCH__(videoId, fallbackMeta);
+    }
+    const { meta, cues } = await fetchInnerTubePlayer(videoId, fallbackMeta);
+    if (cues.length) return { meta, cues };
+
+    const dur = Number(meta.durationSec) || 0;
     if (looksLikeSongTitle(meta.title) || /[\uAC00-\uD7A3]/.test(meta.title)) {
       const queries = [
         Hangul.cleanTrackQuery(meta.title, meta.author),
@@ -1545,11 +1600,8 @@
     return quickFetchQueue;
   }
 
-  function extractThumbMeta(host) {
-    const link =
-      host.querySelector('a[href*="/watch?v="]') ||
-      host.closest('a[href*="/watch?v="]') ||
-      host.parentElement?.querySelector('a[href*="/watch?v="]');
+  function extractCardMeta(card) {
+    const link = card.querySelector('a[href*="/watch?v="]');
     if (!link) return null;
     let vid = "";
     try {
@@ -1557,14 +1609,27 @@
       vid = u.searchParams.get("v") || "";
     } catch (_) {}
     if (!vid) return null;
-    const card = host.closest("ytd-rich-item-renderer, ytd-compact-video-renderer, ytd-video-renderer, ytd-grid-video-renderer, yt-lockup-view-model, .kls-mock-card") || host.parentElement;
-    const titleEl = card && card.querySelector("#video-title, h3 a, .yt-lockup-metadata-view-model__title, [data-kls-title]");
-    const authorEl = card && card.querySelector("#channel-name a, ytd-channel-name a, .yt-content-metadata-view-model__metadata-text");
+    const titleEl = card.querySelector("#video-title, h3 a, .yt-lockup-metadata-view-model__title, .ytLockupMetadataViewModelHeadingReset, [data-kls-title]");
+    const authorEl = card.querySelector("#channel-name a, ytd-channel-name a, .yt-content-metadata-view-model__metadata-text");
     return {
       videoId: vid,
       title: (titleEl && titleEl.textContent ? titleEl.textContent.trim() : "") || link.getAttribute("title") || "",
       author: authorEl && authorEl.textContent ? authorEl.textContent.trim() : ""
     };
+  }
+
+  function findCardRecordMount(card) {
+    const menu = card.querySelector(".ytLockupMetadataViewModelMenuButton, .yt-lockup-metadata-view-model__menu-button, #menu, ytd-menu-renderer");
+    if (menu && menu.parentElement) {
+      const menuPos = getComputedStyle(menu).position;
+      if (menuPos === "absolute") {
+        return { parent: menu, before: menu.firstChild, flexHost: menu };
+      }
+      return { parent: menu.parentElement, before: menu, flexHost: null };
+    }
+    const metaBox = card.querySelector("yt-lockup-metadata-view-model, #meta, #details, .mock-rel-meta");
+    if (metaBox) return { parent: metaBox, before: null, flexHost: null };
+    return null;
   }
 
   function applyThumbButtonState(btn, vid) {
@@ -1596,27 +1661,37 @@
   function scanQuickRecordThumbnails() {
     const allowedSite = location.hostname === "www.youtube.com" || Boolean(root.__KLS_ALLOW_QUICK_SCAN__);
     if (!allowedSite || !state.settings.enabled || state.settings.showQuickRecord === false) {
-      document.querySelectorAll(".kls-thumb-rec").forEach((el) => el.remove());
+      document.querySelectorAll(".kls-card-rec").forEach((el) => el.remove());
+      document.querySelectorAll(".kls-card-menu-flex").forEach((el) => el.classList.remove("kls-card-menu-flex"));
       return;
     }
-    const hosts = document.querySelectorAll("ytd-thumbnail, yt-thumbnail-view-model, .kls-thumb-host");
-    hosts.forEach((host) => {
-      if (host.closest("#movie_player, .kls-dock, ytd-reel-item-renderer, ytd-shorts")) return;
-      const meta = extractThumbMeta(host);
-      const existing = host.querySelector(":scope > .kls-thumb-rec");
+    const cards = document.querySelectorAll(
+      "yt-lockup-view-model, ytd-rich-item-renderer, ytd-video-renderer, ytd-compact-video-renderer, ytd-grid-video-renderer, ytd-playlist-video-renderer, .kls-mock-card"
+    );
+    cards.forEach((card) => {
+      if (card.closest("#movie_player, .kls-dock, ytd-reel-item-renderer, ytd-shorts")) return;
+      if (card.matches("ytd-rich-item-renderer") && card.querySelector("yt-lockup-view-model")) return;
+
+      const meta = extractCardMeta(card);
+      const existing = card.querySelector(".kls-card-rec");
       if (!meta || !meta.videoId) {
         if (existing) existing.remove();
         return;
       }
-      if (getComputedStyle(host).position === "static") {
-        host.style.position = "relative";
+
+      const mount = findCardRecordMount(card);
+      if (!mount || !mount.parent || mount.parent.closest("a, ytd-thumbnail, yt-thumbnail-view-model")) {
+        if (existing) existing.remove();
+        return;
       }
+      if (mount.flexHost) mount.flexHost.classList.add("kls-card-menu-flex");
+
       let btn = existing;
       if (!btn || btn.dataset.klsVid !== meta.videoId) {
         if (existing) existing.remove();
         btn = document.createElement("button");
         btn.type = "button";
-        btn.className = "kls-thumb-rec";
+        btn.className = "kls-card-rec";
         btn.dataset.klsVid = meta.videoId;
         const stop = (e) => {
           e.preventDefault();
@@ -1631,16 +1706,18 @@
           if (!vid || isVideoRecorded(vid) || state.quickStatus[vid] === "loading" || state.quickStatus[vid] === "empty") {
             return;
           }
-          quickRecordVideo(vid, extractThumbMeta(host) || meta);
+          quickRecordVideo(vid, extractCardMeta(card) || meta);
         });
-        host.appendChild(btn);
+        mount.parent.insertBefore(btn, mount.before || null);
+      } else if (btn.parentElement !== mount.parent) {
+        mount.parent.insertBefore(btn, mount.before || null);
       }
       applyThumbButtonState(btn, meta.videoId);
     });
   }
 
   function refreshThumbButtons() {
-    document.querySelectorAll(".kls-thumb-rec").forEach((btn) => {
+    document.querySelectorAll(".kls-card-rec").forEach((btn) => {
       const vid = btn.dataset.klsVid || "";
       if (vid) applyThumbButtonState(btn, vid);
     });
@@ -1696,8 +1773,17 @@
 
     // The right-hand column can appear, disappear or be hidden by another extension after
     // the page loads (theater mode, Enhancer settings), so re-check where the panel lives.
+    // On YouTube Music, keep the video listener and overlay attached across ad skips / track changes.
     setInterval(() => {
-      if (!state.settings.enabled || !isActive() || state.meta.isMusic) return;
+      if (!state.settings.enabled || !isActive()) return;
+      attachVideoListener();
+      if (state.meta.isMusic) {
+        if (state.cues.length) {
+          ensureOverlay();
+          syncToCurrentTime();
+        }
+        return;
+      }
       const want = sideColumn() || document.body;
       if (state.dockEl && state.dockEl.parentElement !== want) renderDock();
     }, 2000);
