@@ -6,11 +6,24 @@
     return /広告|ad\s*will\s*play|video\s*will\s*play\s*after/i.test(String(s || ""));
   }
 
+  function cleanBarAuthor(raw) {
+    const first = String(raw || "").split("•")[0].trim();
+    if (!first || isAdText(first)) return "";
+    if (/^\d[\d,.万億]*\s*(回視聴|再生|views?)|^\d{4}年?$/i.test(first)) return "";
+    return first;
+  }
+
+  function looksLikePlaylistAuthor(s) {
+    return /\bplaylist\b|\bmix\b/i.test(String(s || ""));
+  }
+
   function collectMetadata() {
     const isMusic = location.hostname === "music.youtube.com";
     let videoId = "";
     let title = "";
     let author = "";
+    let barTitle = "";
+    let barAuthor = "";
     let channelId = "";
     let durationSec = 0;
     let isAd = false;
@@ -77,8 +90,8 @@
     if (isMusic) {
       const titleEl = document.querySelector("ytmusic-player-bar .title");
       const subEl = document.querySelector("ytmusic-player-bar .byline");
-      const barTitle = titleEl?.textContent?.trim() || "";
-      const barAuthor = subEl?.textContent?.split("•")[0]?.trim() || "";
+      barTitle = titleEl?.textContent?.trim() || "";
+      barAuthor = cleanBarAuthor(subEl?.textContent || "");
       if (!title && barTitle && !isAdText(barTitle)) {
         title = barTitle;
       }
@@ -86,7 +99,7 @@
         const docTitle = document.title.replace(/\s*-\s*YouTube Music$/, "").trim();
         if (docTitle && docTitle !== "YouTube Music" && !isAdText(docTitle)) title = docTitle;
       }
-      if (!author && barAuthor && !isAdText(barAuthor)) {
+      if (barAuthor && (!author || looksLikePlaylistAuthor(author))) {
         author = barAuthor;
       }
     }
@@ -110,6 +123,8 @@
       videoId,
       title,
       author,
+      barTitle,
+      barAuthor,
       channelId,
       durationSec,
       captionTracks
@@ -117,17 +132,24 @@
   }
 
   let lastEmittedSig = "";
+  let lastVideoId = "";
+  let emitTimer = null;
 
   function metaSig(meta) {
-    return `${meta.videoId}|${meta.title}|${meta.author}|${meta.captionTracks.length}|${meta.durationSec}`;
+    return `${meta.videoId}|${meta.title}|${meta.author}|${meta.barAuthor || ""}|${meta.captionTracks.length}|${meta.durationSec}`;
   }
 
   function emit(attempt = 0) {
+    if (emitTimer) {
+      clearTimeout(emitTimer);
+      emitTimer = null;
+    }
     const meta = collectMetadata();
-    if (meta.stale && attempt < 8) {
-      setTimeout(() => emit(attempt + 1), 500);
+    if (meta.stale && attempt < 5) {
+      emitTimer = setTimeout(() => emit(attempt + 1), 400);
       return;
     }
+    if (meta.videoId) lastVideoId = meta.videoId;
     lastEmittedSig = metaSig(meta);
     window.postMessage(meta, "*");
   }
@@ -136,12 +158,18 @@
   // firing yt-navigate-finish, and metadata/tracks can arrive slightly after the video_id.
   setInterval(() => {
     const meta = collectMetadata();
-    if (!meta.videoId || meta.stale) return;
-    if (meta.isAd && !meta.title) return;
+    if (!meta.videoId) return;
+    if (meta.isAd && !meta.title && meta.videoId === lastVideoId) return;
+    if (meta.videoId !== lastVideoId) {
+      lastVideoId = meta.videoId;
+      emit(0);
+      return;
+    }
+    if (meta.stale) return;
     const sig = metaSig(meta);
     if (sig !== lastEmittedSig) {
       lastEmittedSig = sig;
-      setTimeout(() => emit(0), 250);
+      setTimeout(() => emit(0), 200);
     }
   }, 1000);
 
@@ -149,8 +177,20 @@
     const v = document.querySelector("#movie_player video, video.html5-main-video, video");
     if (!v || v.__klsHooked) return;
     v.__klsHooked = true;
-    v.addEventListener("loadedmetadata", () => setTimeout(() => emit(0), 300));
-    v.addEventListener("emptied", () => setTimeout(() => emit(0), 500));
+    v.addEventListener("loadedmetadata", () => setTimeout(() => emit(0), 250));
+    v.addEventListener("emptied", () => setTimeout(() => emit(0), 400));
+    v.addEventListener("durationchange", () => {
+      try {
+        const curId = document.getElementById("movie_player")?.getVideoData?.()?.video_id || "";
+        if (curId && curId !== lastVideoId) setTimeout(() => emit(0), 150);
+      } catch (_) {}
+    });
+    v.addEventListener("play", () => {
+      try {
+        const curId = document.getElementById("movie_player")?.getVideoData?.()?.video_id || "";
+        if (curId && curId !== lastVideoId) setTimeout(() => emit(0), 150);
+      } catch (_) {}
+    });
   }
   setInterval(bindVideoHooks, 2000);
   bindVideoHooks();

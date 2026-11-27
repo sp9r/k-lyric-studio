@@ -79,7 +79,14 @@
 
   function storageSet(obj) {
     if (hasChromeStorage()) {
-      return new Promise((resolve) => chrome.storage.local.set(obj, resolve));
+      return new Promise((resolve) => {
+        chrome.storage.local.set(obj, () => {
+          if (chrome.runtime && chrome.runtime.lastError) {
+            console.warn("[K-Lyric] storage.set:", chrome.runtime.lastError.message);
+          }
+          resolve();
+        });
+      });
     }
     for (const [k, v] of Object.entries(obj || {})) {
       try {
@@ -151,6 +158,8 @@
     dockEl: null,
     videoEl: null,
     lastLoadedKey: "",
+    loadedVideoId: "",
+    loadedSource: "",
     loadSeq: 0,
     overlayKey: "",
     dockCollapsed: false,
@@ -413,7 +422,8 @@
     state.vocabLog = res.store;
     if (res.added) {
       state.newlyRecordedVideoId = targetVideoId;
-      await storageSet({ vocabLog: res.store });
+      const toWrite = typeof VocabLog.compactForStorage === "function" ? VocabLog.compactForStorage(res.store) : res.store;
+      await storageSet({ vocabLog: toWrite });
       state.vocabRecordNote = `単語帳記録 +${res.uniqueWords}語`;
     } else if (res.reason === "already_recorded") {
       state.vocabRecordNote = "単語帳記録済み";
@@ -999,6 +1009,8 @@
         state.rawCues = parsed;
         state.offsetSec = 0;
         state.sourceLabel = "手動LRC";
+        state.loadedVideoId = state.meta.videoId || "";
+        state.loadedSource = "手動LRC";
         state.showLrcBox = false;
         state.translationNote = "";
         applyCuesWithOffset();
@@ -1025,6 +1037,8 @@
           state.rawCues = res.data.cues;
           state.offsetSec = 0;
           state.sourceLabel = "Whisper AI字幕";
+          state.loadedVideoId = state.meta.videoId || "";
+          state.loadedSource = "Whisper AI字幕";
           applyCuesWithOffset();
           recordCurrentVideoVocab();
         } else {
@@ -1099,7 +1113,16 @@
     // Ad blockers can skip/hide an ad while leaving .ad-showing or brief state behind;
     // if the <video> duration already matches the known track length, it is playing the main track.
     const metaDur = Number(state.meta.durationSec) || 0;
-    if (metaDur >= 30 && v && Number.isFinite(v.duration) && v.duration > 0 && Math.abs(v.duration - metaDur) <= 12) {
+    if (metaDur >= 30 && v && Number.isFinite(v.duration) && v.duration > 0 && Math.abs(v.duration - metaDur) <= 25) {
+      return false;
+    }
+    if (
+      !playerEl.classList.contains("ad-interrupting") &&
+      v &&
+      Number.isFinite(v.duration) &&
+      v.duration >= 90 &&
+      !document.querySelector(".ytp-ad-player-overlay-layout, .ytp-ad-skip-button-modern, .ytp-ad-skip-button")
+    ) {
       return false;
     }
     return true;
@@ -1232,31 +1255,9 @@
 
   async function loadSubtitlesForMeta(force = false) {
     if (!isActive()) return;
-    // Whether the track list was known is part of the key: the first page message can come
-    // before the player has its captions, and the later one must still load them.
-    const hasTracks = Array.isArray(state.meta.captionTracks) && state.meta.captionTracks.length > 0;
-    const key = `${state.meta.videoId}|${state.meta.title}|${state.meta.author}|${hasTracks ? 1 : 0}`;
-    if (!force && key === state.lastLoadedKey) return;
-    state.lastLoadedKey = key;
-    const seq = ++state.loadSeq;
-    const stale = () => seq !== state.loadSeq;
-
-    // Clear the previous video's lines right away so they never show over the next song.
-    state.rawCues = [];
-    state.offsetSec = 0;
-    state.translationNote = "";
-    state.vocabRecordNote = "";
-    state.newlyRecordedVideoId = "";
-    if (!state.meta.videoId) {
-      state.sourceLabel = "再生待ち";
-      applyCuesWithOffset();
-      return;
-    }
-    state.sourceLabel = "読込中";
-    applyCuesWithOffset();
-
-    // 1. Try YouTube Korean caption track first
+    const vid = state.meta.videoId || "";
     const tracks = Array.isArray(state.meta.captionTracks) ? state.meta.captionTracks : [];
+    const hasTracks = tracks.length > 0;
     const koTrack =
       tracks.find((t) => String(t.languageCode).startsWith("ko") && t.kind !== "asr") ||
       tracks.find((t) => String(t.languageCode).startsWith("ko"));
@@ -1264,50 +1265,110 @@
       tracks.find((t) => String(t.languageCode).startsWith("ja") && t.kind !== "asr") ||
       tracks.find((t) => String(t.languageCode).startsWith("ja"));
 
+    // Guard against re-wiping loaded lyrics when minor metadata ticks arrive on playlist shuffle/auto-advance.
+    if (!force && vid && vid === state.loadedVideoId && state.rawCues.length > 0) {
+      const canUpgrade = state.loadedSource !== "YouTube字幕" && Boolean(koTrack && koTrack.baseUrl);
+      if (!canUpgrade) return;
+    }
+
+    // Whether the track list was known is part of the key: the first page message can come
+    // before the player has its captions, and the later one must still load them.
+    const key = `${vid}|${state.meta.title}|${state.meta.author}|${hasTracks ? 1 : 0}`;
+    if (!force && key === state.lastLoadedKey) return;
+    state.lastLoadedKey = key;
+    const seq = ++state.loadSeq;
+    const stale = () => seq !== state.loadSeq;
+
+    // Clear the previous video's lines and overlay right away so they never show over the next song.
+    state.rawCues = [];
+    state.offsetSec = 0;
+    state.translationNote = "";
+    state.vocabRecordNote = "";
+    state.newlyRecordedVideoId = "";
+    state.loadedVideoId = "";
+    state.loadedSource = "";
+    if (state.overlayEl) {
+      state.overlayEl.classList.add("kls-hidden");
+      state.overlayEl.innerHTML = "";
+      state.overlayKey = "";
+    }
+    if (!vid) {
+      state.sourceLabel = "再生待ち";
+      applyCuesWithOffset();
+      return;
+    }
+    state.sourceLabel = "読込中";
+    applyCuesWithOffset();
+
+    const applyLoadedCues = (cues, label) => {
+      state.rawCues = cues;
+      state.offsetSec = 0;
+      state.sourceLabel = label;
+      state.loadedVideoId = vid;
+      state.loadedSource = label;
+      applyCuesWithOffset();
+      recordCurrentVideoVocab();
+      translateMissing(seq);
+      fillGlosses(seq);
+    };
+
+    const tryPageCaptions = async (maxAttempts) => {
+      let viaPage = null;
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        state.sourceLabel = maxAttempts === 1 ? "字幕を取得中" : attempt === 1 ? "字幕を取得中" : `字幕を取得中（再試行 ${attempt}/${maxAttempts}）`;
+        renderDock();
+        viaPage = await requestPageCaptions(vid);
+        if (stale()) return { stale: true, viaPage: null };
+        if (viaPage && viaPage.ok && viaPage.ko) break;
+        if (!viaPage || !viaPage.retry || attempt >= maxAttempts) break;
+        await new Promise((r) => setTimeout(r, 2500));
+        if (stale()) return { stale: true, viaPage: null };
+      }
+      return { stale: false, viaPage };
+    };
+
     let captionError = "";
-    // Regular YouTube: also ask the player when the track list was not in the page message yet.
-    const tryPlayer = Boolean(koTrack && koTrack.baseUrl) || (!state.meta.isMusic && !hasTracks);
-    if (koTrack && koTrack.baseUrl) {
-      const koResp = await sendBg({ type: "kls:fetch-caption", baseUrl: koTrack.baseUrl });
-      if (stale()) return;
-      if (koResp && koResp.ok && koResp.json3) {
-        const koCues = Hangul.parseYouTubeJson3(koResp.json3);
-        let jaCues = [];
-        if (jaTrack && jaTrack.baseUrl) {
-          const jaResp = await sendBg({ type: "kls:fetch-caption", baseUrl: jaTrack.baseUrl });
-          if (jaResp && jaResp.ok && jaResp.json3) {
-            jaCues = Hangul.parseYouTubeJson3(jaResp.json3);
-          }
-        } else {
-          const trUrl = `${koTrack.baseUrl}&tlang=ja`;
-          const trResp = await sendBg({ type: "kls:fetch-caption", baseUrl: trUrl });
-          if (trResp && trResp.ok && trResp.json3) {
-            jaCues = Hangul.parseYouTubeJson3(trResp.json3);
-          }
-        }
+    let fastMeta = null;
+
+    if (!state.meta.isMusic) {
+      // Regular YouTube: try track URL from playerResponse via background first
+      if (koTrack && koTrack.baseUrl) {
+        const koResp = await sendBg({ type: "kls:fetch-caption", baseUrl: koTrack.baseUrl });
         if (stale()) return;
-        const merged = Hangul.mergeDualSubtitles(koCues, jaCues);
-        if (merged.length) {
-          state.rawCues = merged;
-          state.offsetSec = 0;
-          state.sourceLabel = "YouTube字幕";
-          applyCuesWithOffset();
-          recordCurrentVideoVocab();
-          translateMissing(seq);
-          fillGlosses(seq);
-          return;
+        if (koResp && koResp.ok && koResp.json3) {
+          const koCues = Hangul.parseYouTubeJson3(koResp.json3);
+          let jaCues = [];
+          if (jaTrack && jaTrack.baseUrl) {
+            const jaResp = await sendBg({ type: "kls:fetch-caption", baseUrl: jaTrack.baseUrl });
+            if (jaResp && jaResp.ok && jaResp.json3) {
+              jaCues = Hangul.parseYouTubeJson3(jaResp.json3);
+            }
+          } else {
+            const trUrl = `${koTrack.baseUrl}&tlang=ja`;
+            const trResp = await sendBg({ type: "kls:fetch-caption", baseUrl: trUrl });
+            if (trResp && trResp.ok && trResp.json3) {
+              jaCues = Hangul.parseYouTubeJson3(trResp.json3);
+            }
+          }
+          if (stale()) return;
+          const merged = Hangul.mergeDualSubtitles(koCues, jaCues);
+          if (merged.length) {
+            applyLoadedCues(merged, "YouTube字幕");
+            return;
+          }
         }
       }
     }
 
-    // 1a-fast. Same-origin InnerTube player works on both youtube.com and music.youtube.com
-    // without waiting on ad blockers / hidden player caption toggling, and also fills exact
-    // title/author/durationSec when the bar/player was still showing an ad or stale info.
+    // Same-origin InnerTube player works fast (~110ms) on both youtube.com and music.youtube.com
+    // without waiting on ad blockers / hidden player caption toggling, and fills canonical
+    // title/author/durationSec when the bar/player had ad text or stale info.
     if (location.hostname === "www.youtube.com" || location.hostname === "music.youtube.com") {
       try {
-        const fast = await fetchInnerTubePlayer(state.meta.videoId, state.meta);
+        const fast = await fetchInnerTubePlayer(vid, state.meta);
         if (stale()) return;
         if (fast && fast.meta) {
+          fastMeta = fast.meta;
           if (fast.meta.title && (!state.meta.title || /広告|ad\s*will\s*play/i.test(state.meta.title))) {
             state.meta.title = fast.meta.title;
           }
@@ -1319,63 +1380,57 @@
           }
         }
         if (fast && Array.isArray(fast.cues) && fast.cues.length) {
-          state.rawCues = fast.cues;
-          state.offsetSec = 0;
-          state.sourceLabel = "YouTube字幕";
-          applyCuesWithOffset();
-          recordCurrentVideoVocab();
-          translateMissing(seq);
-          fillGlosses(seq);
+          applyLoadedCues(fast.cues, "YouTube字幕");
           return;
         }
       } catch (_) {}
     }
 
-    if (tryPlayer) {
-      // 1b. Direct download was refused: let the player fetch them. Ads and a slow player can
-      // make one try fail, so try a few times before falling back to lyrics.
-      let viaPage = null;
-      for (let attempt = 1; attempt <= 3; attempt++) {
-        state.sourceLabel = attempt === 1 ? "字幕を取得中" : `字幕を取得中（再試行 ${attempt}/3）`;
-        renderDock();
-        viaPage = await requestPageCaptions(state.meta.videoId);
-        if (stale()) return;
-        if (viaPage && viaPage.ok && viaPage.ko) break;
-        if (!viaPage || !viaPage.retry) break;
-        await new Promise((r) => setTimeout(r, 2500));
-        if (stale()) return;
-      }
+    // Regular YouTube: try player captions before falling back to LRCLIB.
+    const tryPlayerEarly = !state.meta.isMusic && (Boolean(koTrack && koTrack.baseUrl) || !hasTracks);
+    if (tryPlayerEarly) {
+      const { stale: aborted, viaPage } = await tryPageCaptions(3);
+      if (aborted) return;
       if (!(viaPage && viaPage.ok)) captionError = captionErrorLabel(viaPage);
       if (viaPage && viaPage.ok && viaPage.ko) {
         const merged = cuesFromCaptionPair(viaPage.ko, viaPage.ja);
         if (merged.length) {
-          state.rawCues = merged;
-          state.offsetSec = 0;
-          state.sourceLabel = "YouTube字幕";
-          applyCuesWithOffset();
-          recordCurrentVideoVocab();
-          translateMissing(seq);
-          fillGlosses(seq);
+          applyLoadedCues(merged, "YouTube字幕");
           return;
         }
       }
     }
 
-    // 2. Try LRCLIB synced lyrics using cleaned title & author
-    // The channel name helps for "Topic" channels but hurts for label channels (HYBE LABELS etc.),
-    // so fall back to the title alone.
-    const latinNoHangul = String(state.meta.title || "").replace(/[\uAC00-\uD7A3]+/g, " ").replace(/\s+/g, " ").trim();
+    // 2. Try LRCLIB synced lyrics using cleaned title & author (plus canonical InnerTube title/artist)
+    const rawBarAuthor = String(state.meta.barAuthor || "").trim();
+    const rawAuthor = String(state.meta.author || "").trim();
+    const fastAuthor = String((fastMeta && fastMeta.author) || "").trim();
+    const preferredArtist = (state.meta.isMusic && rawBarAuthor ? rawBarAuthor : rawAuthor)
+      .replace(/\s*-\s*Topic$/i, "")
+      .trim();
+    const artistHint = preferredArtist || fastAuthor.replace(/\s*-\s*Topic$/i, "").trim() || rawAuthor;
+
+    const latinFromMeta = String(state.meta.title || "").replace(/[\uAC00-\uD7A3]+/g, " ").replace(/\s+/g, " ").trim();
+    const latinFromFast = fastMeta && fastMeta.title
+      ? String(fastMeta.title).replace(/[\uAC00-\uD7A3]+/g, " ").replace(/\s+/g, " ").trim()
+      : "";
     const queries = [
+      Hangul.cleanTrackQuery(state.meta.title, preferredArtist),
       Hangul.cleanTrackQuery(state.meta.title, state.meta.author),
+      fastMeta && fastMeta.title ? Hangul.cleanTrackQuery(fastMeta.title, preferredArtist) : "",
+      fastMeta && fastMeta.title ? Hangul.cleanTrackQuery(fastMeta.title, fastMeta.author) : "",
       Hangul.cleanTrackQuery(state.meta.title, ""),
-      latinNoHangul && latinNoHangul !== state.meta.title ? Hangul.cleanTrackQuery(latinNoHangul, state.meta.author) : ""
+      fastMeta && fastMeta.title ? Hangul.cleanTrackQuery(fastMeta.title, "") : "",
+      latinFromMeta && latinFromMeta !== state.meta.title ? Hangul.cleanTrackQuery(latinFromMeta, preferredArtist) : "",
+      latinFromFast && fastMeta && latinFromFast !== fastMeta.title ? Hangul.cleanTrackQuery(latinFromFast, preferredArtist) : ""
     ].filter((q, i, arr) => q && arr.indexOf(q) === i);
+
     let plainFallbackLyrics = "";
     const dur =
       (Number(state.meta.durationSec) > 0 ? Number(state.meta.durationSec) : 0) ||
       (state.videoEl && !isActualAdPlaying(state.videoEl) && Number.isFinite(state.videoEl.duration) ? state.videoEl.duration : 0);
     for (const query of queries) {
-      const lrcResp = await sendBg({ type: "kls:fetch-lrclib", query, duration: dur });
+      const lrcResp = await sendBg({ type: "kls:fetch-lrclib", query, duration: dur, artist: artistHint });
       if (stale()) return;
       // On regular YouTube many videos are not songs (vlogs, variety shows). Only trust a
       // lyrics hit when the title says it is a song (MVs run longer than the track), or when
@@ -1385,13 +1440,7 @@
       if (lrcResp && lrcResp.ok && lrcResp.syncedLyrics && trusted) {
         const parsed = Hangul.parseLrc(lrcResp.syncedLyrics);
         if (parsed.length) {
-          state.rawCues = parsed;
-          state.offsetSec = 0;
-          state.sourceLabel = "LRCLIB 同期歌詞";
-          applyCuesWithOffset();
-          recordCurrentVideoVocab();
-          translateMissing(seq);
-          fillGlosses(seq);
+          applyLoadedCues(parsed, "LRCLIB 同期歌詞");
           return;
         }
       }
@@ -1400,11 +1449,25 @@
       }
     }
 
+    // YouTube Music fallback: if LRCLIB failed and official Korean track exists on player, try player captions once
+    if (state.meta.isMusic && koTrack && koTrack.baseUrl) {
+      const { stale: aborted, viaPage } = await tryPageCaptions(1);
+      if (aborted) return;
+      if (!(viaPage && viaPage.ok)) captionError = captionErrorLabel(viaPage);
+      if (viaPage && viaPage.ok && viaPage.ko) {
+        const merged = cuesFromCaptionPair(viaPage.ko, viaPage.ja);
+        if (merged.length) {
+          applyLoadedCues(merged, "YouTube字幕");
+          return;
+        }
+      }
+    }
+
     // On YouTube Music, record Korean vocabulary even when only unsynced plainLyrics exist.
     if (state.meta.isMusic && plainFallbackLyrics) {
       const lines = plainFallbackLyrics.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-      const dur = state.videoEl && state.videoEl.duration ? state.videoEl.duration : lines.length * 4;
-      const step = dur / Math.max(1, lines.length);
+      const pDur = state.videoEl && state.videoEl.duration ? state.videoEl.duration : lines.length * 4;
+      const step = pDur / Math.max(1, lines.length);
       const plainCues = lines.map((line, i) => ({
         id: i,
         start: Number((i * step).toFixed(2)),
@@ -1476,6 +1539,22 @@
     return u.toString();
   }
 
+  async function fetchCaptionWithFallback(baseUrl) {
+    if (!baseUrl) return null;
+    try {
+      const res = await fetch(withJson3Param(baseUrl), { credentials: "omit" });
+      if (res.ok) {
+        const text = await res.text();
+        if (text) return JSON.parse(text);
+      }
+    } catch (_) {}
+    try {
+      const resp = await sendBg({ type: "kls:fetch-caption", baseUrl });
+      if (resp && resp.ok && resp.json3) return resp.json3;
+    } catch (_) {}
+    return null;
+  }
+
   async function fetchInnerTubePlayer(videoId, fallbackMeta) {
     const resp = await fetch("/youtubei/v1/player?prettyPrint=false", {
       method: "POST",
@@ -1507,15 +1586,11 @@
 
     let cues = [];
     if (koTrack && koTrack.baseUrl) {
-      const koRes = await fetch(withJson3Param(koTrack.baseUrl), { credentials: "omit" });
-      if (koRes.ok) {
-        const koJson = await koRes.json();
+      const koJson = await fetchCaptionWithFallback(koTrack.baseUrl);
+      if (koJson) {
         let jaJson = null;
         if (jaTrack && jaTrack.baseUrl) {
-          try {
-            const jaRes = await fetch(withJson3Param(jaTrack.baseUrl), { credentials: "omit" });
-            if (jaRes.ok) jaJson = await jaRes.json();
-          } catch (_) {}
+          jaJson = await fetchCaptionWithFallback(jaTrack.baseUrl);
         }
         cues = cuesFromCaptionPair(koJson, jaJson);
       }
@@ -1601,7 +1676,8 @@
           const res = VocabLog.recordVideo(baseStore, meta, cues);
           state.vocabLog = res.store;
           if (res.added) {
-            await storageSet({ vocabLog: res.store });
+            const toWrite = typeof VocabLog.compactForStorage === "function" ? VocabLog.compactForStorage(res.store) : res.store;
+            await storageSet({ vocabLog: toWrite });
           }
           recordedResult = res;
         }).catch(() => {}));
@@ -1770,12 +1846,41 @@
     scanQuickRecordThumbnails();
   }
 
+  function needsVocabLogCompaction(raw) {
+    if (!raw || typeof raw !== "object") return false;
+    const videos = raw.videos && typeof raw.videos === "object" ? raw.videos : {};
+    for (const v of Object.values(videos)) {
+      if (v && Array.isArray(v.wordKeys)) return true;
+    }
+    const words = raw.words && typeof raw.words === "object" ? raw.words : {};
+    for (const w of Object.values(words)) {
+      if (!w || !Array.isArray(w.occurrences)) continue;
+      for (const occ of w.occurrences) {
+        if (occ && occ.videoId && videos[occ.videoId] && (occ.url !== undefined || occ.title !== undefined || occ.isMusic !== undefined)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   async function init(initialMeta) {
     const stored = await storageGet(["settings", "savedCards", "vocabLog", "dockCollapsed", "activation"]);
     state.dockCollapsed = Boolean(stored.dockCollapsed);
     if (stored.settings) state.settings = { ...DEFAULT_SETTINGS, ...stored.settings };
     if (stored.savedCards && typeof stored.savedCards === "object") state.savedCards = stored.savedCards;
     state.vocabLog = VocabLog ? VocabLog.normalizeStore(stored.vocabLog) : null;
+    if (VocabLog && typeof VocabLog.compactForStorage === "function" && needsVocabLogCompaction(stored.vocabLog)) {
+      setTimeout(() => {
+        vocabRecordQueue = vocabRecordQueue.then(async () => {
+          const latest = await storageGet(["vocabLog"]);
+          if (needsVocabLogCompaction(latest.vocabLog || stored.vocabLog)) {
+            const compacted = VocabLog.compactForStorage(latest.vocabLog || state.vocabLog);
+            await storageSet({ vocabLog: compacted });
+          }
+        }).catch(() => {});
+      }, 2000);
+    }
     state.activation = Activation ? Activation.normalize(stored.activation) : null;
     if (initialMeta) state.meta = { ...state.meta, ...initialMeta };
     state.activationResult = currentActivation();

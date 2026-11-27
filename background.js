@@ -6,11 +6,15 @@ function hasHangul(s) {
   return /[\uAC00-\uD7A3]/.test(String(s || ""));
 }
 
-async function fetchLrclibLyrics(query, durationSec) {
+async function fetchLrclibLyrics(query, durationSec, artistHint) {
   const cleanQ = String(query || "").trim();
   if (!cleanQ) return { ok: false, error: "検索語が空です" };
 
-  const cacheKey = `${cleanQ}|${Math.round(durationSec || 0)}`;
+  const normArtist = String(artistHint || "")
+    .replace(/\s*-\s*Topic$/i, "")
+    .trim()
+    .toLowerCase();
+  const cacheKey = `${cleanQ}|${Math.round(durationSec || 0)}|${normArtist}`;
   if (lrcCache.has(cacheKey)) {
     return lrcCache.get(cacheKey);
   }
@@ -26,6 +30,7 @@ async function fetchLrclibLyrics(query, durationSec) {
       return { ok: false, error: "該当する同期歌詞が見つかりません" };
     }
 
+    const targetDur = Number(durationSec) || 0;
     const scored = list
       .filter((item) => item && (item.syncedLyrics || item.plainLyrics))
       .map((item) => {
@@ -33,19 +38,31 @@ async function fetchLrclibLyrics(query, durationSec) {
         if (item.syncedLyrics) score += 50;
         if (hasHangul(item.syncedLyrics || item.plainLyrics)) score += 40;
         const itemDur = Number(item.duration) || 0;
-        if (itemDur > 0 && itemDur < 20 && (!durationSec || durationSec >= 40)) {
+        if (itemDur > 0 && itemDur < 20 && (!targetDur || targetDur >= 40)) {
           score -= 100;
-        } else if (durationSec && itemDur) {
-          const diff = Math.abs(itemDur - Number(durationSec));
+        } else if (targetDur >= 30 && itemDur > 0 && Math.abs(itemDur - targetDur) > 45) {
+          score -= 80;
+        } else if (targetDur && itemDur) {
+          const diff = Math.abs(itemDur - targetDur);
           if (diff <= 5) score += 20;
           else if (diff <= 15) score += 10;
         }
-        return { item, score };
+        if (normArtist) {
+          const itemArtist = String(item.artistName || "").toLowerCase();
+          if (itemArtist && (itemArtist.includes(normArtist) || (normArtist.length >= 2 && normArtist.includes(itemArtist)))) {
+            score += 15;
+          }
+        }
+        const durDiff = targetDur && itemDur ? Math.abs(itemDur - targetDur) : 9999;
+        return { item, score, durDiff };
       })
-      .sort((a, b) => b.score - a.score);
+      .sort((a, b) => (b.score - a.score) || (a.durDiff - b.durDiff));
 
     if (!scored.length) {
       return { ok: false, error: "利用可能な歌詞データがありません" };
+    }
+    if (scored[0].score < 0) {
+      return { ok: false, error: "条件に合う歌詞が見つかりません" };
     }
 
     const top = scored[0].item;
@@ -149,7 +166,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (!msg || !msg.type) return false;
 
   if (msg.type === "kls:fetch-lrclib") {
-    fetchLrclibLyrics(msg.query, msg.duration).then(sendResponse);
+    fetchLrclibLyrics(msg.query, msg.duration, msg.artist || "").then(sendResponse);
     return true;
   }
 

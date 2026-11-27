@@ -29,7 +29,14 @@
 
   function storageSet(obj) {
     if (hasChromeStorage()) {
-      return new Promise((resolve) => chrome.storage.local.set(obj, resolve));
+      return new Promise((resolve) => {
+        chrome.storage.local.set(obj, () => {
+          if (chrome.runtime && chrome.runtime.lastError) {
+            console.warn("[K-Lyric] storage.set:", chrome.runtime.lastError.message);
+          }
+          resolve();
+        });
+      });
     }
     for (const [k, v] of Object.entries(obj)) {
       localStorage.setItem(`kls:${k}`, JSON.stringify(v));
@@ -123,7 +130,11 @@
       }
       for (const k of candidates) {
         if (k && wordsMap[k] && Array.isArray(wordsMap[k].occurrences) && wordsMap[k].occurrences.length) {
-          logOccs = wordsMap[k].occurrences;
+          logOccs = wordsMap[k].occurrences.map((o) =>
+            VocabLog && typeof VocabLog.hydrateOccurrence === "function"
+              ? VocabLog.hydrateOccurrence(o, state.vocabLog.videos)
+              : o
+          );
           break;
         }
       }
@@ -398,7 +409,8 @@
           const next = VocabLog.removeVideo(state.vocabLog, v.videoId);
           if (next.removed) {
             state.vocabLog = next.store;
-            await storageSet({ vocabLog: state.vocabLog });
+            const toWrite = typeof VocabLog.compactForStorage === "function" ? VocabLog.compactForStorage(state.vocabLog) : state.vocabLog;
+            await storageSet({ vocabLog: toWrite });
             state.freqMessage = `「${v.title || v.videoId}」の記録を削除しました`;
             renderAll();
           }
@@ -463,7 +475,8 @@
       }
     });
     state.vocabLog = store;
-    await storageSet({ vocabLog: store, savedCards: state.savedCards });
+    const toWrite = typeof VocabLog.compactForStorage === "function" ? VocabLog.compactForStorage(store) : store;
+    await storageSet({ vocabLog: toWrite, savedCards: state.savedCards });
     state.freqMessage = `${updated}語の意味を補完しました`;
     renderAll();
   }

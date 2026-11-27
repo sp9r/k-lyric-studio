@@ -73,6 +73,8 @@ test("parses LRC, YouTube JSON3, merges dual subtitles, and applies offset", () 
   assert.equal(merged[0].ja, "私たち一緒に行こう");
 
   assert.equal(Hangul.cleanTrackQuery("ILLIT (아일릿) 'Magnetic' Official MV", "HYBE LABELS"), "HYBE LABELS ILLIT Magnetic");
+  assert.equal(Hangul.cleanTrackQuery("I'm Unhappy", "aespa - Topic"), "aespa I'm Unhappy");
+  assert.equal(Hangul.cleanTrackQuery("You’re Under Arrest", "ILLIT"), "ILLIT You're Under Arrest");
 });
 
 test("analyzes Korean inflections, irregular stems, particles, and coverage stats", () => {
@@ -433,4 +435,39 @@ test("getWordMarker and aligned renderLine mark known/learning/seen (with intens
   assert.ok(html.includes('class="kls-al-word is-seen"'));
   assert.ok(html.includes(`--kls-seen-t:${m4.intensity}`));
   assert.ok(html.includes('class="kls-al-word" data-word="처음보는말"'));
+});
+
+test("vocab_log: compactForStorage strips redundant metadata and normalizeStore/hydrateOccurrence restores it", () => {
+  let store = VocabLog.normalizeStore(null);
+  const cues1 = [
+    { start: 12, ko: "오늘 정말 설레잖아 우리 같이 가자", ja: "今日すごくときめくじゃない" },
+    { start: 45, ko: "설레고 기분 좋아 내일도 보자", ja: "ときめいて気分いい" }
+  ];
+  const cues2 = [
+    { start: 38, ko: "내 맘이 너한테 설레잖아", ja: "心が君にときめく" }
+  ];
+  store = VocabLog.recordVideo(store, { isMusic: false, videoId: "vidA", title: "Vlog Title A", author: "ILLIT" }, cues1, 1000).store;
+  store = VocabLog.recordVideo(store, { isMusic: true, videoId: "musB", title: "Music Track B", author: "aespa" }, cues2, 2000).store;
+
+  const fullBytes = JSON.stringify(store).length;
+  const compacted = VocabLog.compactForStorage(store);
+  const compactBytes = JSON.stringify(compacted).length;
+
+  assert.ok(compactBytes < fullBytes, `expected compactBytes (${compactBytes}) < fullBytes (${fullBytes})`);
+  assert.equal(compacted.videos.vidA.wordKeys, undefined);
+  assert.equal(compacted.words["설레다"].occurrences[0].title, undefined);
+  assert.equal(compacted.words["설레다"].occurrences[0].url, undefined);
+
+  const hydrated = VocabLog.normalizeStore(compacted);
+  assert.equal(hydrated.words["설레다"].occurrences.length, 3);
+  assert.equal(hydrated.words["설레다"].occurrences[0].title, "Vlog Title A");
+  assert.equal(hydrated.words["설레다"].occurrences[0].url, "https://www.youtube.com/watch?v=vidA&t=12s");
+  assert.equal(hydrated.words["설레다"].occurrences[0].isMusic, false);
+  assert.equal(hydrated.words["설레다"].occurrences[2].title, "Music Track B");
+  assert.equal(hydrated.words["설레다"].occurrences[2].url, "https://music.youtube.com/watch?v=musB&t=38s");
+  assert.equal(hydrated.words["설레다"].occurrences[2].isMusic, true);
+
+  const hLegacy = VocabLog.hydrateOccurrence({ videoId: "vidA", title: "Custom", url: "https://www.youtube.com/watch?v=vidA&t=5s", sec: 5 }, hydrated.videos);
+  assert.equal(hLegacy.title, "Custom");
+  assert.equal(hLegacy.url, "https://www.youtube.com/watch?v=vidA&t=5s");
 });
