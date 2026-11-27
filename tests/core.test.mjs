@@ -471,3 +471,69 @@ test("vocab_log: compactForStorage strips redundant metadata and normalizeStore/
   assert.equal(hLegacy.title, "Custom");
   assert.equal(hLegacy.url, "https://www.youtube.com/watch?v=vidA&t=5s");
 });
+
+test("vocab_log: rankWords defaults to totalCount descending", () => {
+  const store = {
+    version: 1,
+    videos: {
+      v1: { videoId: "v1", title: "V1", site: "music" },
+      v2: { videoId: "v2", title: "V2", site: "music" }
+    },
+    words: {
+      "자주": { key: "자주", videoCount: 2, totalCount: 3, lastSeenAt: 2000, occurrences: [] },
+      "정말": { key: "정말", videoCount: 1, totalCount: 15, lastSeenAt: 1000, occurrences: [] }
+    }
+  };
+  const rankedDefault = VocabLog.rankWords(store, {});
+  assert.equal(rankedDefault[0].key, "정말");
+  const rankedByVideos = VocabLog.rankWords(store, {}, { sort: "videos" });
+  assert.equal(rankedByVideos[0].key, "자주");
+});
+
+test("srs: gradeCard caps intervalDays at MAX_INTERVAL_DAYS, demotes forgotten mastered cards, and buildStudyQueue orders roughly by totalCount + interleaves mastered reviews", () => {
+  const now = 10_000_000_000;
+  const DAY = 24 * 60 * 60 * 1000;
+  let c = { surface: "설레잖아", reps: 0, intervalDays: 0, ease: 2.5, lapses: 0, streak: 0, mastered: false, dueAt: 0 };
+  for (let i = 0; i < 6; i++) {
+    c = SRS.gradeCard(c, 4, now + i * DAY);
+  }
+  assert.equal(c.mastered, true);
+  assert.equal(c.intervalDays, SRS.MAX_INTERVAL_DAYS);
+
+  const forgotten = SRS.gradeCard(c, 2, now + 10 * DAY);
+  assert.equal(forgotten.mastered, false);
+  const lapsedCard = SRS.gradeCard(c, 1, now + 10 * DAY);
+  assert.equal(lapsedCard.mastered, false);
+  assert.equal(lapsedCard.lapses, 1);
+
+  const savedCards = {
+    "기억": { surface: "기억", lemma: "기억", reps: 4, intervalDays: 10, streak: 4, mastered: true, dueAt: now - 1000, lastReviewedAt: now - 10 * DAY },
+    "사랑": { surface: "사랑", lemma: "사랑", reps: 4, intervalDays: 20, streak: 4, mastered: true, dueAt: now + 10 * DAY, lastReviewedAt: now - 3 * DAY },
+    "낮은": { surface: "낮은", lemma: "낮은", reps: 1, intervalDays: 1, streak: 1, mastered: false, lapses: 0, dueAt: now - 1000 },
+    "실수": { surface: "실수", lemma: "실수", reps: 0, intervalDays: 0, streak: 0, mastered: false, lapses: 1, dueAt: now - 1000 }
+  };
+  const vocabLog = {
+    version: 1,
+    videos: { v1: { videoId: "v1", title: "Song 1", site: "music" } },
+    words: {
+      "가장많음": { key: "가장많음", lemma: "가장많음", totalCount: 40, videoCount: 2, lastSeenAt: now, occurrences: [{ videoId: "v1", sec: 10, context: "가장많음" }] },
+      "실수": { key: "실수", lemma: "실수", totalCount: 10, videoCount: 1, lastSeenAt: now, occurrences: [{ videoId: "v1", sec: 20, context: "실수" }] },
+      "보통": { key: "보통", lemma: "보통", totalCount: 9, videoCount: 1, lastSeenAt: now, occurrences: [{ videoId: "v1", sec: 25, context: "보통" }] },
+      "추가후보": { key: "추가후보", lemma: "추가후보", totalCount: 8, videoCount: 1, lastSeenAt: now, occurrences: [{ videoId: "v1", sec: 30, context: "추가후보" }] },
+      "낮은": { key: "낮은", lemma: "낮은", totalCount: 2, videoCount: 1, lastSeenAt: now, occurrences: [{ videoId: "v1", sec: 40, context: "낮은" }] }
+    }
+  };
+
+  const q = SRS.buildStudyQueue(savedCards, vocabLog, { nowMs: now, interleaveEvery: 2, vocabLogApi: VocabLog });
+  const order = q.map((x) => x.surface);
+  // 40-count unlearned comes first, then 10-count lapsed, then interleaved due_mastered '기억', then 9/8, then refresher '사랑', then 2-count '낮은'
+  assert.equal(order[0], "가장많음");
+  assert.equal(order[1], "실수");
+  assert.equal(order[2], "기억");
+  assert.equal(q[2]._reviewKind, "due_mastered");
+  assert.ok(order.indexOf("가장많음") < order.indexOf("낮은"));
+  assert.ok(order.indexOf("실수") < order.indexOf("낮은"));
+  assert.ok(order.includes("사랑"));
+  const ref = q.find((x) => x.surface === "사랑");
+  assert.equal(ref._reviewKind, "refresher");
+});

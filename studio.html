@@ -51,7 +51,10 @@
     <!-- 1. Flashcard view -->
     <section id="pane-card" class="kls-section" style="display:grid;gap:12px;">
       <div class="kls-row">
-        <span id="card-source-badge" class="kls-badge">出典なし</span>
+        <div class="kls-seg" style="flex-wrap:wrap;gap:6px;">
+          <span id="card-source-badge" class="kls-badge">出典なし</span>
+          <span id="card-meta-badge" class="kls-badge kls-hidden"></span>
+        </div>
         <div class="kls-seg">
           <button id="btn-card-speak" type="button" class="kls-btn">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
@@ -204,8 +207,8 @@
       <div class="kls-row">
         <input id="freq-search" type="text" class="kls-input" style="flex:1;min-width:200px;" placeholder="ハングル・読み・意味・動画タイトルで検索" />
         <select id="freq-sort" class="kls-select" style="width:auto;">
+          <option value="total" selected>総出現回数が多い順</option>
           <option value="videos">出現動画数が多い順</option>
-          <option value="total">総出現回数が多い順</option>
           <option value="recent">最近見た順</option>
         </select>
         <select id="freq-filter" class="kls-select" style="width:auto;">

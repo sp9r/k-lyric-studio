@@ -73,10 +73,87 @@
     freqMessage: ""
   };
 
+  const meaningInFlight = new Set();
+
+  function lookupFreqTotal(card) {
+    const wordsMap = state.vocabLog && state.vocabLog.words;
+    if (!wordsMap || !card) return 0;
+    const candidates = [card.lemma, card.surface];
+    if (Dict && typeof Dict.analyzeToken === "function" && card.surface) {
+      const a = Dict.analyzeToken(card.surface);
+      if (a && a.lemma) candidates.push(a.lemma);
+    }
+    for (const k of candidates) {
+      if (k && wordsMap[k]) return Number(wordsMap[k].totalCount) || 0;
+    }
+    return 0;
+  }
+
+  function stripQueueMeta(card) {
+    if (!card || typeof card !== "object") return card;
+    const { _fromFreq, _reviewKind, _freqTotal, _freqVideos, ...clean } = card;
+    return clean;
+  }
+
+  function reviewBadgeLabel(item) {
+    if (!item) return "";
+    const kind = item._reviewKind;
+    let base = "学習中";
+    if (kind === "due_mastered") base = "復習（習得済み）";
+    else if (kind === "refresher") base = "定着チェック（習得済み）";
+    else if (kind === "lapsed") base = "再復習";
+    else if (kind === "freq_new") base = "頻出候補";
+    const freq = Number(item._freqTotal) || lookupFreqTotal(item);
+    return freq > 0 ? `${base} · 計 ${freq}回` : base;
+  }
+
+  function ensureCardMeaning(item) {
+    if (!item || item.meaning) return;
+    const q = item.lemma || item.surface;
+    if (!q) return;
+    if (Dict && typeof Dict.analyzeToken === "function") {
+      const a = Dict.analyzeToken(q);
+      if (a && a.matched !== false && a.meaning) {
+        item.meaning = a.meaning;
+        const mEl = document.getElementById("card-meaning");
+        if (mEl && state.queue[state.idx] && state.queue[state.idx].surface === item.surface) {
+          mEl.textContent = a.meaning;
+        }
+        return;
+      }
+    }
+    if (typeof chrome === "undefined" || !chrome.runtime || !chrome.runtime.sendMessage) return;
+    if (meaningInFlight.has(item.surface)) return;
+    meaningInFlight.add(item.surface);
+    chrome.runtime.sendMessage({ type: "kls:translate", lines: [q] }, async (res) => {
+      meaningInFlight.delete(item.surface);
+      const tr = res && res.ok && Array.isArray(res.lines) ? String(res.lines[0] || "").trim() : "";
+      if (!tr) return;
+      item.meaning = tr;
+      if (state.savedCards[item.surface] && !state.savedCards[item.surface].meaning) {
+        state.savedCards[item.surface].meaning = tr;
+      }
+      if (state.vocabLog && state.vocabLog.words && state.vocabLog.words[q] && !state.vocabLog.words[q].meaning) {
+        state.vocabLog.words[q].meaning = tr;
+      }
+      const mEl = document.getElementById("card-meaning");
+      if (mEl && state.queue[state.idx] && state.queue[state.idx].surface === item.surface) {
+        mEl.textContent = tr;
+      }
+    });
+  }
+
   function buildQueue() {
-    const all = Object.values(state.savedCards);
-    const due = all.filter((c) => SRS.isDue(c));
-    state.queue = due.length ? due : all;
+    if (SRS && typeof SRS.buildStudyQueue === "function") {
+      state.queue = SRS.buildStudyQueue(state.savedCards, state.vocabLog, {
+        dictApi: Dict,
+        vocabLogApi: VocabLog
+      });
+    } else {
+      const all = Object.values(state.savedCards);
+      const due = all.filter((c) => SRS.isDue(c));
+      state.queue = due.length ? due : all;
+    }
     if (state.idx >= state.queue.length) state.idx = 0;
   }
 
@@ -87,7 +164,7 @@
     const mastered = all.filter((c) => c.mastered).length;
     const learning = total - mastered;
     const seenOnly = VocabLog
-      ? VocabLog.rankWords(state.vocabLog, state.savedCards, { sort: "videos", filter: "unlearned" }).length
+      ? VocabLog.rankWords(state.vocabLog, state.savedCards, { sort: "total", filter: "unlearned" }).length
       : 0;
     document.getElementById("studio-stats").textContent = `既知 ${mastered} / 学習中 ${learning} / 既出 ${seenOnly}語（復習待ち ${due}）`;
     const mPct = total ? Math.round((mastered / total) * 100) : 0;
@@ -166,14 +243,21 @@
     const item = state.queue[state.idx];
     const occBox = document.getElementById("card-occurrences");
     const vLink = document.getElementById("btn-card-video");
+    const metaBadge = document.getElementById("card-meta-badge");
     if (!item) {
       document.getElementById("card-source-badge").textContent = "出典なし";
+      if (metaBadge) metaBadge.classList.add("kls-hidden");
       vLink.classList.add("kls-hidden");
       document.getElementById("card-surface").textContent = "登録カードがありません";
       document.getElementById("card-context").textContent = "「単語一覧・管理」からスターター24語を追加するか、動画から単語を保存してください。";
       document.getElementById("card-answer").classList.add("kls-hidden");
       if (occBox) occBox.innerHTML = "";
       return;
+    }
+
+    if (metaBadge) {
+      metaBadge.textContent = reviewBadgeLabel(item);
+      metaBadge.classList.remove("kls-hidden");
     }
 
     const occs = itemOccurrences(item);
@@ -201,6 +285,7 @@
     document.getElementById("card-answer").classList.toggle("kls-hidden", !state.revealed);
     renderAlignedReading(document.getElementById("card-reading"), item);
     document.getElementById("card-meaning").textContent = item.meaning || "";
+    if (!item.meaning) ensureCardMeaning(item);
     document.getElementById("card-morph").textContent = `基本形: ${item.lemma || item.surface}${item.endingLabel ? ` ・ ${item.endingLabel} (${item.endingMeaning})` : ""}`;
     document.getElementById("card-ja-ctx").textContent = item.jaContext ? `文脈訳: ${item.jaContext}` : "";
   }
@@ -218,11 +303,16 @@
     el.innerHTML = `<span class="kls-card-aligned">${alignedReadingHtml(card)}</span>`;
   }
 
+  function clozePool() {
+    return state.queue.length ? state.queue : Object.values(state.savedCards);
+  }
+
   function renderClozePane() {
-    const all = Object.values(state.savedCards);
-    if (!all.length) return;
-    const item = all[state.clozeIdx % all.length];
-    const q = SRS.buildClozeQuestion(item, all, state.clozeIdx);
+    const pool = clozePool();
+    if (!pool.length) return;
+    const item = pool[state.clozeIdx % pool.length];
+    const allItems = Object.values(state.savedCards).concat(state.queue);
+    const q = SRS.buildClozeQuestion(item, allItems, state.clozeIdx);
     const occs = itemOccurrences(item);
     const primary = occs[0];
     document.getElementById("cloze-source").textContent = occs.length > 1
@@ -289,6 +379,7 @@
       const hay = `${c.surface} ${c.lemma} ${c.katakana} ${c.romanized} ${c.meaning} ${c.sourceTitle} ${occTitles}`.toLowerCase();
       return hay.includes(query);
     });
+    items.sort((a, b) => lookupFreqTotal(b) - lookupFreqTotal(a) || (Number(b.savedAt) || 0) - (Number(a.savedAt) || 0));
 
     container.innerHTML = "";
     if (!items.length) {
@@ -331,7 +422,7 @@
     if (!VocabLog) return;
     const store = VocabLog.normalizeStore(state.vocabLog);
     const videoCount = Object.keys(store.videos).length;
-    const allWords = VocabLog.rankWords(store, state.savedCards, { sort: "videos", filter: "all" });
+    const allWords = VocabLog.rankWords(store, state.savedCards, { sort: "total", filter: "all" });
     const unlearnedCount = allWords.filter((w) => !w.saved).length;
     document.getElementById("freq-summary").textContent =
       `記録動画 ${videoCount}本 / 既出単語 ${allWords.length}語 / 未登録 ${unlearnedCount}語（同一動画は重複カウントしません）`;
@@ -447,7 +538,7 @@
       return;
     }
     const store = VocabLog.normalizeStore(state.vocabLog);
-    const targets = VocabLog.rankWords(store, state.savedCards, { sort: "videos", filter: "all" })
+    const targets = VocabLog.rankWords(store, state.savedCards, { sort: "total", filter: "all" })
       .filter((w) => !w.meaning)
       .slice(0, 60);
     if (!targets.length) {
@@ -530,7 +621,7 @@
     document.getElementById("freq-filter").onchange = renderFreqPane;
     document.getElementById("btn-freq-add10").onclick = async () => {
       if (!VocabLog) return;
-      const topUnlearned = VocabLog.rankWords(state.vocabLog, state.savedCards, { sort: "videos", filter: "unlearned" }).slice(0, 10);
+      const topUnlearned = VocabLog.rankWords(state.vocabLog, state.savedCards, { sort: "total", filter: "unlearned" }).slice(0, 10);
       for (const w of topUnlearned) {
         state.savedCards[w.key] = VocabLog.toStudyCard(w, state.savedCards[w.key]);
       }
@@ -562,25 +653,33 @@
       b.onclick = async () => {
         const item = state.queue[state.idx];
         if (!item) return;
-        const updated = SRS.gradeCard(item, Number(b.dataset.grade));
-        state.savedCards[item.surface] = updated;
+        const prevSurface = item.surface;
+        const cleanItem = stripQueueMeta(item);
+        const updated = SRS.gradeCard(cleanItem, Number(b.dataset.grade));
+        state.savedCards[updated.surface] = updated;
         await storageSet({ savedCards: state.savedCards });
         state.revealed = false;
         buildQueue();
-        if (state.queue.length) state.idx = (state.idx + 1) % state.queue.length;
+        if (state.queue.length) {
+          if (state.queue[state.idx] && state.queue[state.idx].surface === prevSurface) {
+            state.idx = (state.idx + 1) % state.queue.length;
+          } else if (state.idx >= state.queue.length) {
+            state.idx = 0;
+          }
+        }
         renderAll();
       };
     });
 
     document.getElementById("btn-cloze-speak").onclick = () => {
-      const all = Object.values(state.savedCards);
-      const item = all[state.clozeIdx % Math.max(1, all.length)];
+      const pool = clozePool();
+      const item = pool[state.clozeIdx % Math.max(1, pool.length)];
       if (item) speakKo(item.context || item.surface);
     };
     document.getElementById("btn-cloze-check").onclick = () => {
-      const all = Object.values(state.savedCards);
-      if (!all.length) return;
-      const item = all[state.clozeIdx % all.length];
+      const pool = clozePool();
+      if (!pool.length) return;
+      const item = pool[state.clozeIdx % pool.length];
       const input = document.getElementById("cloze-input").value;
       const check = SRS.checkStudyAnswer(input, item);
       state.clozeAnswered = { correct: check.correct, chosen: input };

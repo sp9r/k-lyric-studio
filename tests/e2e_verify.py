@@ -221,10 +221,15 @@ def run_e2e() -> None:
                 }));
             }""")
             studio.reload(wait_until="networkidle")
-            # Advance past '같이' (due from mock) so the queued starter/saved card '설레잖아' is shown,
-            # verifying vocabLog occurrences merge into both Card and Cloze tabs.
-            while studio.locator("#card-surface").inner_text().strip() != "설레잖아":
+            # Advance past any higher-ranked card until '설레잖아' is shown,
+            # verifying vocabLog occurrences merge into both Card and Cloze tabs and badge shows frequency/status.
+            for _ in range(10):
+                if studio.locator("#card-surface").inner_text().strip() == "설레잖아":
+                    break
                 studio.locator('.grade-btn[data-grade="4"]').click()
+            assert studio.locator("#card-surface").inner_text().strip() == "설레잖아"
+            badge_txt = studio.locator("#card-meta-badge").inner_text().strip()
+            assert "計 3回" in badge_txt, f"Expected total frequency in card-meta-badge, got: {badge_txt}"
             studio.wait_for_selector("#card-occurrences .kls-occ-link")
             card_occ_links = studio.eval_on_selector_all(
                 "#card-occurrences .kls-occ-link",
@@ -243,6 +248,7 @@ def run_e2e() -> None:
             assert cloze_href and "&t=" in cloze_href, cloze_href
 
             studio.locator('[data-stab="freq"]').click()
+            assert studio.locator("#freq-sort").input_value() == "total", "freq-sort must default to total"
             studio.wait_for_selector("#freq-word-list .kls-occ-link")
             occ_links = studio.eval_on_selector_all(
                 "#freq-word-list .kls-occ-link",
