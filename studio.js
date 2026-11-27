@@ -3,7 +3,19 @@
   const SRS = window.KLyricSRS;
   const Aligned = window.KLyricAligned;
   const VocabLog = window.KLyricVocabLog;
+
   const PLAY_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`;
+  const SPEAK_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>`;
+  const TRASH_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path></svg>`;
+  const PLUS_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>`;
+  const CHECK_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+
+  const TAB_TITLES = {
+    card: "単語カード",
+    cloze: "穴埋めクイズ",
+    list: "単語一覧・管理",
+    freq: "頻出単語帳"
+  };
 
   function esc(s) {
     return Aligned ? Aligned.escapeHtml(s) : String(s || "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -95,16 +107,29 @@
     return clean;
   }
 
-  function reviewBadgeLabel(item) {
-    if (!item) return "";
+  function reviewBadgeInfo(item) {
+    if (!item) return { label: "", tone: "is-accent" };
     const kind = item._reviewKind;
     let base = "学習中";
-    if (kind === "due_mastered") base = "復習（習得済み）";
-    else if (kind === "refresher") base = "定着チェック（習得済み）";
-    else if (kind === "lapsed") base = "再復習";
-    else if (kind === "freq_new") base = "頻出候補";
+    let tone = "is-accent";
+    if (kind === "due_mastered") {
+      base = "復習（習得済み）";
+      tone = "is-success";
+    } else if (kind === "refresher") {
+      base = "定着チェック（習得済み）";
+      tone = "is-success";
+    } else if (kind === "lapsed") {
+      base = "再復習";
+      tone = "is-danger";
+    } else if (kind === "freq_new") {
+      base = "頻出候補";
+      tone = "is-warn";
+    }
     const freq = Number(item._freqTotal) || lookupFreqTotal(item);
-    return freq > 0 ? `${base} · 計 ${freq}回` : base;
+    return {
+      label: freq > 0 ? `${base} · 計 ${freq}回` : base,
+      tone
+    };
   }
 
   function ensureCardMeaning(item) {
@@ -166,17 +191,44 @@
     const seenOnly = VocabLog
       ? VocabLog.rankWords(state.vocabLog, state.savedCards, { sort: "total", filter: "unlearned" }).length
       : 0;
+    const freqTotal = VocabLog ? Object.keys((state.vocabLog && state.vocabLog.words) || {}).length : 0;
+
     document.getElementById("studio-stats").textContent = `既知 ${mastered} / 学習中 ${learning} / 既出 ${seenOnly}語（復習待ち ${due}）`;
-    const mPct = total ? Math.round((mastered / total) * 100) : 0;
-    const lPct = total ? Math.max(0, 100 - mPct) : 0;
+    document.getElementById("metric-due").textContent = `${due}`;
+    document.getElementById("metric-learning").textContent = `${learning}`;
+    document.getElementById("metric-mastered").textContent = `${mastered}`;
+    document.getElementById("metric-seen").textContent = `${seenOnly}`;
+
+    const navDue = document.getElementById("nav-due-count");
+    const navFreq = document.getElementById("nav-freq-count");
+    const navList = document.getElementById("nav-list-count");
+    if (navDue) navDue.textContent = `${due}`;
+    if (navFreq) navFreq.textContent = `${freqTotal}`;
+    if (navList) navList.textContent = `${total}`;
+
+    const denom = mastered + learning + seenOnly;
+    const mPct = denom ? Math.round((mastered / denom) * 100) : 0;
+    const lPct = denom ? Math.round((learning / denom) * 100) : 0;
+    const sPct = denom ? Math.max(0, 100 - mPct - lPct) : 0;
     document.getElementById("s-bar-mastered").style.width = `${mPct}%`;
     document.getElementById("s-bar-learning").style.width = `${lPct}%`;
+    const seenBar = document.getElementById("s-bar-seen");
+    if (seenBar) seenBar.style.width = `${sPct}%`;
   }
 
   function renderTabs() {
     document.querySelectorAll("[data-stab]").forEach((b) => {
-      b.classList.toggle("is-active", b.dataset.stab === state.tab);
+      const active = b.dataset.stab === state.tab;
+      b.classList.toggle("is-active", active);
+      b.setAttribute("aria-current", active ? "page" : "false");
     });
+    document.querySelectorAll("[data-mob-tab]").forEach((b) => {
+      const active = b.dataset.mobTab === state.tab;
+      b.classList.toggle("is-active", active);
+      b.setAttribute("aria-current", active ? "page" : "false");
+    });
+    const topTitle = document.getElementById("topbar-title");
+    if (topTitle) topTitle.textContent = TAB_TITLES[state.tab] || "単語カード";
     ["card", "cloze", "list", "freq"].forEach((t) => {
       document.getElementById(`pane-${t}`).classList.toggle("kls-hidden", state.tab !== t);
     });
@@ -244,6 +296,18 @@
     const occBox = document.getElementById("card-occurrences");
     const vLink = document.getElementById("btn-card-video");
     const metaBadge = document.getElementById("card-meta-badge");
+    const revealBtn = document.getElementById("btn-card-reveal");
+    const easyBtn = document.querySelector('.grade-btn[data-grade="4"]');
+
+    if (revealBtn) {
+      revealBtn.classList.toggle("is-primary", !state.revealed);
+      const lbl = revealBtn.querySelector("span");
+      if (lbl) lbl.textContent = state.revealed ? "答えを隠す" : "答えを見る";
+    }
+    if (easyBtn) {
+      easyBtn.classList.toggle("is-primary", state.revealed);
+    }
+
     if (!item) {
       document.getElementById("card-source-badge").textContent = "出典なし";
       if (metaBadge) metaBadge.classList.add("kls-hidden");
@@ -256,8 +320,9 @@
     }
 
     if (metaBadge) {
-      metaBadge.textContent = reviewBadgeLabel(item);
-      metaBadge.classList.remove("kls-hidden");
+      const info = reviewBadgeInfo(item);
+      metaBadge.textContent = info.label;
+      metaBadge.className = `ui-status-dot ${info.tone}`;
     }
 
     const occs = itemOccurrences(item);
@@ -290,11 +355,8 @@
     document.getElementById("card-ja-ctx").textContent = item.jaContext ? `文脈訳: ${item.jaContext}` : "";
   }
 
-  // Pronounced hangul, katakana, and romanization on separate rows, each under its syllable.
   function alignedReadingHtml(card) {
-    const Aligned = window.KLyricAligned;
-    const Hangul = window.KLyricHangul;
-    const token = Aligned && Hangul ? Hangul.alignReading(card.surface || "")[0] : null;
+    const token = Aligned && window.KLyricHangul ? window.KLyricHangul.alignReading(card.surface || "")[0] : null;
     if (!token) return Aligned ? Aligned.escapeHtml(SRS.formatReadingAll(card)) : "";
     return Aligned.renderWord(token, ["pron", "kana", "roman"]);
   }
@@ -351,20 +413,22 @@
 
     const choicesBox = document.getElementById("cloze-choices");
     choicesBox.innerHTML = "";
-    for (const ch of q.choices) {
+    const letters = ["A", "B", "C", "D"];
+    q.choices.forEach((ch, idx) => {
       const b = document.createElement("button");
       b.type = "button";
       b.className = "kls-btn";
-      b.textContent = ch;
-      if (state.clozeAnswered) {
-        if (ch === q.correct) b.classList.add("is-active");
+      b.style.justifyContent = "flex-start";
+      b.innerHTML = `<span class="kls-choice-key">${letters[idx] || idx + 1}</span><span>${esc(ch)}</span>`;
+      if (state.clozeAnswered && ch === q.correct) {
+        b.classList.add("is-active");
       }
       b.onclick = () => {
         state.clozeAnswered = { correct: ch === q.correct, chosen: ch };
         renderClozePane();
       };
       choicesBox.appendChild(b);
-    }
+    });
   }
 
   function renderListPane() {
@@ -383,28 +447,30 @@
 
     container.innerHTML = "";
     if (!items.length) {
-      container.innerHTML = `<div class="kls-muted">一致する単語がありません。</div>`;
+      container.innerHTML = `<div class="kls-word-empty">一致する単語がありません。</div>`;
       return;
     }
 
     for (const c of items) {
+      const freq = lookupFreqTotal(c);
       const row = document.createElement("div");
       row.className = "kls-word-item";
       const occHtml = renderOccurrencesHtml(itemOccurrences(c), 3);
       row.innerHTML = `
-        <div style="display:grid;gap:3px;flex:1;min-width:220px;">
-          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-            <strong style="font-size:15px;">${esc(c.surface)}</strong>
-            <span class="kls-badge">${esc(c.lemma || c.surface)}</span>
-            ${c.mastered ? `<span class="kls-badge is-success">習得済み</span>` : `<span class="kls-badge is-accent">学習中</span>`}
+        <div style="display:grid;gap:4px;flex:1;min-width:220px;">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <strong style="font-size:15px;" lang="ko">${esc(c.surface)}</strong>
+            ${c.lemma && c.lemma !== c.surface ? `<span class="kls-muted">${esc(c.lemma)}</span>` : ""}
+            <span class="ui-status-dot ${c.mastered ? "is-success" : "is-accent"}">${c.mastered ? "習得済み" : "学習中"}</span>
+            ${freq > 0 ? `<span class="kls-muted">計 ${freq}回</span>` : ""}
           </div>
           <div class="kls-card-aligned">${alignedReadingHtml(c)}</div>
           <div>${esc(c.meaning || "")}</div>
           ${occHtml || `<div class="kls-muted">${esc(c.sourceTitle || "")} · ${formatSec(c.timestampSec)}</div>`}
         </div>
         <div class="kls-seg">
-          <button type="button" class="kls-btn" data-lspeak="${esc(c.surface)}">発音</button>
-          <button type="button" class="kls-btn" data-ldel="${esc(c.surface)}">削除</button>
+          <button type="button" class="kls-btn" data-lspeak="${esc(c.surface)}">${SPEAK_ICON}<span>発音</span></button>
+          <button type="button" class="kls-btn" data-ldel="${esc(c.surface)}">${TRASH_ICON}<span>削除</span></button>
         </div>
       `;
       row.querySelector("[data-lspeak]").onclick = () => speakKo(c.surface);
@@ -436,32 +502,35 @@
     const listEl = document.getElementById("freq-word-list");
     listEl.innerHTML = "";
     if (!rows.length) {
-      listEl.innerHTML = `<div class="kls-muted">${allWords.length ? "条件に一致する単語がありません。" : "まだ動画からの記録がありません。YouTube（字幕ON・動画の＋ボタン）または YouTube Music で韓国語の動画・曲を扱うと自動でここに溜まります。"}</div>`;
+      listEl.innerHTML = `<div class="kls-word-empty">${allWords.length ? "条件に一致する単語がありません。" : "まだ動画からの記録がありません。YouTube（字幕ON・動画の＋ボタン）または YouTube Music で韓国語の動画・曲を扱うと自動でここに溜まります。"}</div>`;
     } else {
-      for (const w of rows.slice(0, 200)) {
+      const shown = rows.slice(0, 200);
+      const maxCount = Math.max(1, ...shown.map((r) => Number(r.totalCount) || 1));
+      for (const w of shown) {
         const cardLike = { surface: w.key };
-        const statusBadge = w.mastered
-          ? `<span class="kls-badge is-success">習得済み</span>`
-          : w.saved
-            ? `<span class="kls-badge is-accent">覚えるリスト登録済み</span>`
-            : `<span class="kls-badge">未登録</span>`;
+        const statusTone = w.mastered ? "is-success" : w.saved ? "is-accent" : "is-neutral";
+        const statusLabel = w.mastered ? "習得済み" : w.saved ? "学習中（登録済み）" : "未登録";
+        const barPct = Math.max(8, Math.round(((Number(w.totalCount) || 0) / maxCount) * 100));
         const row = document.createElement("div");
         row.className = "kls-word-item";
         row.innerHTML = `
-          <div style="display:grid;gap:4px;flex:1;min-width:240px;">
-            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+          <div style="display:grid;gap:4px;flex:1;min-width:220px;">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
               <strong style="font-size:15px;" lang="ko">${esc(w.key)}</strong>
-              <span class="kls-badge is-accent">${w.videoCount}動画 · ${w.totalCount}回</span>
+              <span class="ui-status-dot ${statusTone}">${statusLabel}</span>
               ${w.pos ? `<span class="kls-badge">${esc(w.pos)}</span>` : ""}
-              ${statusBadge}
+              <span class="kls-freq-meter" title="総出現 ${w.totalCount}回 / ${w.videoCount}動画">
+                <span class="kls-freq-track"><span class="kls-freq-fill" style="width:${barPct}%"></span></span>
+                <span>${w.totalCount}回 · ${w.videoCount}動画</span>
+              </span>
             </div>
             <div class="kls-card-aligned">${alignedReadingHtml(cardLike)}</div>
             <div>${w.meaning ? esc(w.meaning) : `<span class="kls-muted">意味未登録（「未訳の単語を訳す」で補完可）</span>`}</div>
             ${renderOccurrencesHtml(w.occurrences, 3)}
           </div>
           <div class="kls-seg">
-            <button type="button" class="kls-btn" data-fspeak="${esc(w.key)}">発音</button>
-            <button type="button" class="kls-btn${w.saved ? "" : " is-primary"}" data-fadd="${esc(w.key)}" ${w.saved ? "disabled" : ""}>${w.saved ? "登録済み" : "覚えるリストへ追加"}</button>
+            <button type="button" class="kls-btn" data-fspeak="${esc(w.key)}">${SPEAK_ICON}<span>発音</span></button>
+            <button type="button" class="kls-btn${w.saved ? " is-active" : ""}" data-fadd="${esc(w.key)}" ${w.saved ? "disabled" : ""}>${w.saved ? CHECK_ICON : PLUS_ICON}<span>${w.saved ? "登録済み" : "覚えるリストへ追加"}</span></button>
           </div>
         `;
         row.querySelector("[data-fspeak]").onclick = () => speakKo(w.key);
@@ -483,7 +552,7 @@
     const videos = Object.values(store.videos).sort((a, b) => (b.recordedAt || 0) - (a.recordedAt || 0));
     vListEl.innerHTML = "";
     if (!videos.length) {
-      vListEl.innerHTML = `<div class="kls-muted">記録済み動画はまだありません。</div>`;
+      vListEl.innerHTML = `<div class="kls-word-empty">記録済み動画はまだありません。</div>`;
     } else {
       for (const v of videos) {
         const vRow = document.createElement("div");
@@ -494,7 +563,7 @@
             <a class="kls-occ-link" href="${esc(vUrl)}" target="_blank" rel="noopener">${PLAY_ICON}<span class="kls-occ-title">${esc(v.title || v.videoId)}</span></a>
             <div class="kls-muted">${v.site === "music" ? "YouTube Music" : "YouTube"} · 記録語数 ${v.uniqueWords || 0}語</div>
           </div>
-          <button type="button" class="kls-btn" data-fdelvid="${esc(v.videoId)}">記録を消す</button>
+          <button type="button" class="kls-btn" data-fdelvid="${esc(v.videoId)}">${TRASH_ICON}<span>記録を消す</span></button>
         `;
         vRow.querySelector("[data-fdelvid]").onclick = async () => {
           const next = VocabLog.removeVideo(state.vocabLog, v.videoId);
@@ -577,6 +646,12 @@
     return ["card", "cloze", "list", "freq"].includes(h) ? h : "";
   }
 
+  function switchTab(next) {
+    if (!["card", "cloze", "list", "freq"].includes(next)) return;
+    state.tab = next;
+    renderAll();
+  }
+
   async function init() {
     const res = await storageGet(["savedCards", "vocabLog", "settings"]);
     if (res.settings) state.settings = { ...state.settings, ...res.settings };
@@ -597,8 +672,7 @@
     window.addEventListener("hashchange", () => {
       const next = tabFromHash();
       if (next && next !== state.tab) {
-        state.tab = next;
-        renderAll();
+        switchTab(next);
       }
     });
 
@@ -606,6 +680,7 @@
       chrome.storage.onChanged.addListener((changes) => {
         if (changes.vocabLog && VocabLog) {
           state.vocabLog = VocabLog.normalizeStore(changes.vocabLog.newValue);
+          buildQueue();
           renderAll();
         }
         if (changes.savedCards && changes.savedCards.newValue) {
@@ -615,6 +690,24 @@
         }
       });
     }
+
+    document.querySelectorAll("[data-jump]").forEach((btn) => {
+      btn.onclick = () => {
+        const target = btn.dataset.jump;
+        if (target === "due") {
+          switchTab("card");
+        } else if (target === "learning") {
+          document.getElementById("list-filter").value = "due";
+          switchTab("list");
+        } else if (target === "mastered") {
+          document.getElementById("list-filter").value = "mastered";
+          switchTab("list");
+        } else if (target === "seen") {
+          document.getElementById("freq-filter").value = "unlearned";
+          switchTab("freq");
+        }
+      };
+    });
 
     document.getElementById("freq-search").oninput = renderFreqPane;
     document.getElementById("freq-sort").onchange = renderFreqPane;
@@ -635,10 +728,10 @@
     document.getElementById("btn-freq-translate").onclick = translateMissingFreqWords;
 
     document.querySelectorAll("[data-stab]").forEach((b) => {
-      b.onclick = () => {
-        state.tab = b.dataset.stab;
-        renderAll();
-      };
+      b.onclick = () => switchTab(b.dataset.stab);
+    });
+    document.querySelectorAll("[data-mob-tab]").forEach((b) => {
+      b.onclick = () => switchTab(b.dataset.mobTab);
     });
 
     document.getElementById("btn-card-speak").onclick = () => {

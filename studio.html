@@ -7,227 +7,316 @@
   <link rel="stylesheet" href="ui.css" />
 </head>
 <body>
-  <main class="kls-wrap">
-    <header class="kls-head">
-      <div class="kls-brand">
+  <div class="ui-app">
+    <aside class="ui-sidebar" aria-label="サイドナビゲーション">
+      <div class="ui-brand">
         <img src="icons/icon.svg" alt="" />
-        <span>K-Lyric Studio 復習スタジオ</span>
+        <span>K-Lyric Studio</span>
       </div>
-      <div class="kls-seg">
-        <button data-stab="card" type="button" class="kls-btn is-active">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="M7 10h10"></path></svg>
-          <span>単語カード</span>
-        </button>
-        <button data-stab="cloze" type="button" class="kls-btn">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
-          <span>穴埋めクイズ</span>
-        </button>
-        <button data-stab="list" type="button" class="kls-btn">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
-          <span>単語一覧・管理</span>
-        </button>
-        <button data-stab="freq" type="button" class="kls-btn">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
-          <span>頻出単語帳</span>
-        </button>
-        <a href="options.html" class="kls-btn">
+
+      <div class="ui-nav-section">学習</div>
+      <button data-stab="card" type="button" class="ui-nav-item is-active" aria-current="page">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="M7 10h10"></path></svg>
+        <span>単語カード</span>
+        <span id="nav-due-count" class="ui-nav-count">0</span>
+      </button>
+      <button data-stab="cloze" type="button" class="ui-nav-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+        <span>穴埋めクイズ</span>
+      </button>
+
+      <div class="ui-nav-section">単語帳</div>
+      <button data-stab="freq" type="button" class="ui-nav-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+        <span>頻出単語帳</span>
+        <span id="nav-freq-count" class="ui-nav-count">0</span>
+      </button>
+      <button data-stab="list" type="button" class="ui-nav-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+        <span>単語一覧・管理</span>
+        <span id="nav-list-count" class="ui-nav-count">0</span>
+      </button>
+
+      <div class="ui-sidebar-foot">
+        <a href="options.html" class="ui-nav-item">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.6.77 1 1.51 1H21a2 2 0 1 1 0 4h-.09c-.74 0-1.25.4-1.51 1z"></path></svg>
           <span>設定</span>
         </a>
       </div>
-    </header>
+    </aside>
 
-    <section class="kls-section">
-      <div class="kls-row" style="margin-bottom:6px;">
-        <span class="kls-title" style="margin:0;">学習進捗</span>
-        <span id="studio-stats" class="kls-muted">登録 0 / 復習待ち 0 / 習得 0</span>
-      </div>
-      <div class="kls-progress-track">
-        <div id="s-bar-mastered" style="width:0%;background:var(--ui-success);"></div>
-        <div id="s-bar-learning" style="width:0%;background:var(--ui-accent);"></div>
-      </div>
-    </section>
-
-    <!-- 1. Flashcard view -->
-    <section id="pane-card" class="kls-section" style="display:grid;gap:12px;">
-      <div class="kls-row">
-        <div class="kls-seg" style="flex-wrap:wrap;gap:6px;">
-          <span id="card-source-badge" class="kls-badge">出典なし</span>
-          <span id="card-meta-badge" class="kls-badge kls-hidden"></span>
+    <main class="ui-main">
+      <header class="ui-topbar">
+        <div class="ui-breadcrumb">
+          <span class="kls-muted">K-Lyric Studio /</span>
+          <strong id="topbar-title">単語カード</strong>
         </div>
-        <div class="kls-seg">
-          <button id="btn-card-speak" type="button" class="kls-btn">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
-            <span>発音を聴く</span>
-          </button>
-          <a id="btn-card-video" href="#" target="_blank" rel="noopener" class="kls-btn">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-            <span>該当部分を再生</span>
-          </a>
-        </div>
-      </div>
+        <span id="studio-stats" class="kls-muted">既知 0 / 学習中 0 / 既出 0語（復習待ち 0）</span>
+      </header>
 
-      <div class="kls-card-box" style="text-align:center;display:grid;gap:8px;">
-        <div id="card-surface" style="font-size:28px;font-weight:700;"></div>
-        <div id="card-context" class="kls-muted" style="font-size:14px;"></div>
-        <div id="card-occurrences" class="kls-source-box"></div>
-        <div id="card-answer" class="kls-hidden" style="border-top:1px solid var(--ui-border);padding-top:10px;display:grid;gap:4px;">
-          <div id="card-reading" style="font-size:14px;font-weight:600;color:var(--ui-accent);"></div>
-          <div id="card-meaning" style="font-size:16px;font-weight:700;"></div>
-          <div id="card-morph" class="kls-muted"></div>
-          <div id="card-ja-ctx" class="kls-muted"></div>
-        </div>
-      </div>
-
-      <div class="kls-row">
-        <button id="btn-card-reveal" type="button" class="kls-btn">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-          <span>答えを見る</span>
-        </button>
-        <div class="kls-seg">
-          <button data-grade="1" type="button" class="kls-btn grade-btn">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>
-            <span>もう一回</span>
-          </button>
-          <button data-grade="2" type="button" class="kls-btn grade-btn">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="8" y1="15" x2="16" y2="15"></line></svg>
-            <span>難しい</span>
-          </button>
-          <button data-grade="3" type="button" class="kls-btn grade-btn">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-            <span>普通</span>
-          </button>
-          <button data-grade="4" type="button" class="kls-btn is-primary grade-btn">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-            <span>簡単</span>
-          </button>
-        </div>
-      </div>
-    </section>
-
-    <!-- 2. Cloze quiz view -->
-    <section id="pane-cloze" class="kls-section kls-hidden" style="display:grid;gap:12px;">
-      <div class="kls-row">
-        <span id="cloze-source" class="kls-badge">穴埋めクイズ</span>
-        <div class="kls-seg">
-          <button id="btn-cloze-speak" type="button" class="kls-btn">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
-            <span>文を読み上げ</span>
-          </button>
-          <a id="btn-cloze-video" href="#" target="_blank" rel="noopener" class="kls-btn kls-hidden">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-            <span>該当部分を再生</span>
-          </a>
-        </div>
-      </div>
-
-      <div class="kls-card-box" style="text-align:center;display:grid;gap:6px;">
-        <div id="cloze-prompt" style="font-size:20px;font-weight:700;"></div>
-        <div id="cloze-ja" class="kls-muted"></div>
-        <div id="cloze-feedback" class="kls-hidden" style="padding-top:8px;border-top:1px solid var(--ui-border);"></div>
-        <div id="cloze-occurrences" class="kls-source-box"></div>
-      </div>
-
-      <div id="cloze-choices" class="kls-grid-2"></div>
-
-      <div class="kls-row">
-        <input id="cloze-input" type="text" class="kls-input" style="flex:1;min-width:200px;" placeholder="ハングル・ローマ字・カタカナで直接入力も可" />
-        <button id="btn-cloze-check" type="button" class="kls-btn">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-          <span>入力を判定</span>
-        </button>
-        <button id="btn-cloze-next" type="button" class="kls-btn is-primary">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
-          <span>次の問題</span>
-        </button>
-      </div>
-    </section>
-
-    <!-- 3. Word list & import/export view -->
-    <section id="pane-list" class="kls-section kls-hidden" style="display:grid;gap:12px;">
-      <div class="kls-row">
-        <input id="list-search" type="text" class="kls-input" style="flex:1;min-width:200px;" placeholder="ハングル・読み・意味・動画タイトルで絞り込み" />
-        <select id="list-filter" class="kls-select" style="width:auto;">
-          <option value="all">すべて</option>
-          <option value="due">復習待ち</option>
-          <option value="mastered">習得済み</option>
-        </select>
-        <button id="btn-add-starter" type="button" class="kls-btn">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-          <span>スターター24語を追加</span>
-        </button>
-      </div>
-
-      <div id="word-list-container" class="kls-word-list"></div>
-
-      <div class="kls-card-box" style="display:grid;gap:8px;">
-        <div class="kls-row">
-          <span class="kls-title" style="margin:0;">単語データのインポート・書き出し</span>
-          <div class="kls-seg">
-            <button id="btn-export-json" type="button" class="kls-btn">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-              <span>JSON書き出し</span>
+      <div class="ui-content">
+        <section class="kls-overview" aria-label="学習進捗の概要">
+          <div class="kls-metric-strip">
+            <button type="button" class="kls-metric-btn" data-jump="due">
+              <span class="kls-metric-label"><i class="kls-dot is-warn"></i>復習待ち</span>
+              <span id="metric-due" class="kls-metric-val">0</span>
             </button>
-            <button id="btn-export-tsv" type="button" class="kls-btn">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-              <span>TSV書き出し</span>
+            <button type="button" class="kls-metric-btn" data-jump="learning">
+              <span class="kls-metric-label"><i class="kls-dot is-accent"></i>学習中</span>
+              <span id="metric-learning" class="kls-metric-val">0</span>
+            </button>
+            <button type="button" class="kls-metric-btn" data-jump="mastered">
+              <span class="kls-metric-label"><i class="kls-dot is-success"></i>既知</span>
+              <span id="metric-mastered" class="kls-metric-val">0</span>
+            </button>
+            <button type="button" class="kls-metric-btn" data-jump="seen">
+              <span class="kls-metric-label"><i class="kls-dot is-unseen"></i>既出（未登録）</span>
+              <span id="metric-seen" class="kls-metric-val">0</span>
             </button>
           </div>
-        </div>
-        <textarea id="import-box" class="kls-textarea" rows="3" placeholder="JSON配列、または TSV/CSV（単語, 基本形, 発音ハングル, カタカナ, ローマ字, 意味）を貼り付け"></textarea>
-        <div class="kls-row">
-          <span id="import-status" class="kls-muted">貼り付けてインポートできます</span>
-          <button id="btn-import-run" type="button" class="kls-btn is-primary">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-            <span>インポート実行</span>
-          </button>
-        </div>
+          <div class="kls-progress-track">
+            <div id="s-bar-mastered" style="width:0%;background:var(--ui-success);"></div>
+            <div id="s-bar-learning" style="width:0%;background:var(--ui-accent);"></div>
+            <div id="s-bar-seen" style="width:0%;background:var(--ui-unseen);"></div>
+          </div>
+        </section>
+
+        <!-- 1. Flashcard view -->
+        <section id="pane-card" class="kls-section-stack">
+          <div class="ui-page-head">
+            <div>
+              <h1>単語カード</h1>
+              <p>頻出順で新しい語を出しつつ、忘却前に習得済みも復習します。</p>
+            </div>
+            <div class="ui-actions">
+              <button id="btn-card-speak" type="button" class="kls-btn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+                <span>発音を聴く</span>
+              </button>
+              <a id="btn-card-video" href="#" target="_blank" rel="noopener" class="kls-btn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                <span>該当部分を再生</span>
+              </a>
+            </div>
+          </div>
+
+          <div class="ui-panel">
+            <div class="kls-stage-head">
+              <span id="card-meta-badge" class="ui-status-dot is-accent kls-hidden">学習中</span>
+              <span id="card-source-badge" class="kls-muted">出典なし</span>
+            </div>
+            <div class="kls-stage-body">
+              <div id="card-surface" class="kls-stage-word" lang="ko"></div>
+              <div id="card-context" class="kls-muted" style="font-size:14px;" lang="ko"></div>
+              <div id="card-occurrences" class="kls-source-box"></div>
+              <div id="card-answer" class="kls-stage-answer kls-hidden">
+                <div id="card-reading" style="font-size:14px;font-weight:600;color:var(--ui-accent);"></div>
+                <div id="card-meaning" style="font-size:16px;font-weight:700;"></div>
+                <div id="card-morph" class="kls-muted"></div>
+                <div id="card-ja-ctx" class="kls-muted"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="kls-row">
+            <button id="btn-card-reveal" type="button" class="kls-btn is-primary">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+              <span>答えを見る</span>
+            </button>
+            <div class="kls-seg">
+              <button data-grade="1" type="button" class="kls-btn grade-btn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>
+                <span>もう一回</span>
+              </button>
+              <button data-grade="2" type="button" class="kls-btn grade-btn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="8" y1="15" x2="16" y2="15"></line></svg>
+                <span>難しい</span>
+              </button>
+              <button data-grade="3" type="button" class="kls-btn grade-btn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                <span>普通</span>
+              </button>
+              <button data-grade="4" type="button" class="kls-btn grade-btn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                <span>簡単</span>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- 2. Cloze quiz view -->
+        <section id="pane-cloze" class="kls-section-stack kls-hidden">
+          <div class="ui-page-head">
+            <div>
+              <h1>穴埋めクイズ</h1>
+              <p>歌詞・セリフの文脈から単語を選び、入力でも確認できます。</p>
+            </div>
+            <div class="ui-actions">
+              <button id="btn-cloze-speak" type="button" class="kls-btn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+                <span>文を読み上げ</span>
+              </button>
+              <a id="btn-cloze-video" href="#" target="_blank" rel="noopener" class="kls-btn kls-hidden">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                <span>該当部分を再生</span>
+              </a>
+            </div>
+          </div>
+
+          <div class="ui-panel">
+            <div class="kls-stage-head">
+              <span class="ui-status-dot is-accent">文脈テスト</span>
+              <span id="cloze-source" class="kls-muted">穴埋めクイズ</span>
+            </div>
+            <div class="kls-stage-body">
+              <div id="cloze-prompt" style="font-size:20px;font-weight:700;" lang="ko"></div>
+              <div id="cloze-ja" class="kls-muted"></div>
+              <div id="cloze-feedback" class="kls-hidden" style="padding-top:8px;border-top:1px solid var(--ui-border);"></div>
+              <div id="cloze-occurrences" class="kls-source-box"></div>
+            </div>
+          </div>
+
+          <div id="cloze-choices" class="kls-grid-2"></div>
+
+          <div class="kls-toolbar">
+            <input id="cloze-input" type="text" class="kls-input" style="flex:1;min-width:200px;" placeholder="ハングル・ローマ字・カタカナで直接入力も可" />
+            <button id="btn-cloze-check" type="button" class="kls-btn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              <span>入力を判定</span>
+            </button>
+            <button id="btn-cloze-next" type="button" class="kls-btn is-primary">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+              <span>次の問題</span>
+            </button>
+          </div>
+        </section>
+
+        <!-- 3. Word list & import/export view -->
+        <section id="pane-list" class="kls-section-stack kls-hidden">
+          <div class="ui-page-head">
+            <div>
+              <h1>単語一覧・管理</h1>
+              <p>保存したカードの検索・削除やスターター単語の追加を行えます。</p>
+            </div>
+            <div class="ui-actions">
+              <button id="btn-add-starter" type="button" class="kls-btn is-primary">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                <span>スターター24語を追加</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="kls-toolbar">
+            <input id="list-search" type="text" class="kls-input" style="flex:1;min-width:200px;" placeholder="ハングル・読み・意味・動画タイトルで絞り込み" />
+            <select id="list-filter" class="kls-select" style="width:auto;">
+              <option value="all">すべて</option>
+              <option value="due">復習待ち</option>
+              <option value="mastered">習得済み</option>
+            </select>
+          </div>
+
+          <div class="ui-panel">
+            <div id="word-list-container" class="kls-word-list"></div>
+          </div>
+
+          <details class="ui-panel kls-details-panel">
+            <summary>単語データの取り込み・書き出し</summary>
+            <div class="kls-details-body">
+              <div class="kls-row">
+                <span id="import-status" class="kls-muted">テキストを貼り付けて取り込めます</span>
+                <div class="kls-seg">
+                  <button id="btn-export-json" type="button" class="kls-btn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                    <span>バックアップ書き出し</span>
+                  </button>
+                  <button id="btn-export-tsv" type="button" class="kls-btn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                    <span>表形式で書き出し</span>
+                  </button>
+                </div>
+              </div>
+              <textarea id="import-box" class="kls-textarea" rows="3" placeholder="表データ（タブ区切り・カンマ区切り: 単語, 基本形, 発音ハングル, カタカナ, ローマ字, 意味）を貼り付け"></textarea>
+              <div style="display:flex;justify-content:flex-end;">
+                <button id="btn-import-run" type="button" class="kls-btn">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                  <span>取り込みを実行</span>
+                </button>
+              </div>
+            </div>
+          </details>
+        </section>
+
+        <!-- 4. Frequent vocabulary log view -->
+        <section id="pane-freq" class="kls-section-stack kls-hidden">
+          <div class="ui-page-head">
+            <div>
+              <h1>頻出単語帳</h1>
+              <p id="freq-summary">記録動画 0本 / 既出単語 0語 / 未登録 0語（同一動画は重複除外）</p>
+            </div>
+            <div class="ui-actions">
+              <button id="btn-freq-translate" type="button" class="kls-btn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 8l6 6"></path><path d="M4 14l6-6 2-3"></path><path d="M2 5h12"></path><path d="M7 2h1"></path><path d="M22 22l-5-10-5 10"></path><path d="M14 18h6"></path></svg>
+                <span>未訳の単語を訳す</span>
+              </button>
+              <button id="btn-freq-add10" type="button" class="kls-btn is-primary">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                <span>上位10語を覚えるリストへ追加</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="kls-toolbar">
+            <input id="freq-search" type="text" class="kls-input" style="flex:1;min-width:200px;" placeholder="ハングル・読み・意味・動画タイトルで検索" />
+            <select id="freq-sort" class="kls-select" style="width:auto;">
+              <option value="total" selected>総出現回数が多い順</option>
+              <option value="videos">出現動画数が多い順</option>
+              <option value="recent">最近見た順</option>
+            </select>
+            <select id="freq-filter" class="kls-select" style="width:auto;">
+              <option value="all">すべて</option>
+              <option value="unlearned">未登録（覚える候補）</option>
+              <option value="saved">覚えるリスト登録済み</option>
+              <option value="mastered">習得済み</option>
+            </select>
+          </div>
+
+          <div id="freq-status" class="kls-muted"></div>
+
+          <div class="ui-panel">
+            <div id="freq-word-list" class="kls-word-list"></div>
+          </div>
+
+          <details class="ui-panel kls-details-panel">
+            <summary>記録済みの動画一覧（重複カウント防止）</summary>
+            <div id="freq-video-list" class="kls-word-list"></div>
+          </details>
+        </section>
       </div>
-    </section>
+    </main>
+  </div>
 
-    <!-- 4. Frequent vocabulary log view -->
-    <section id="pane-freq" class="kls-section kls-hidden" style="display:grid;gap:12px;">
-      <div class="kls-row">
-        <div>
-          <div class="kls-title" style="margin:0;">動画から記録した韓国語 頻出単語帳</div>
-          <div id="freq-summary" class="kls-muted">記録動画 0本 / 既出単語 0語 / 未登録 0語（同一動画は重複除外）</div>
-        </div>
-        <div class="kls-seg">
-          <button id="btn-freq-add10" type="button" class="kls-btn is-primary">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-            <span>上位10語を覚えるリストへ追加</span>
-          </button>
-          <button id="btn-freq-translate" type="button" class="kls-btn">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 8l6 6"></path><path d="M4 14l6-6 2-3"></path><path d="M2 5h12"></path><path d="M7 2h1"></path><path d="M22 22l-5-10-5 10"></path><path d="M14 18h6"></path></svg>
-            <span>未訳の単語を訳す</span>
-          </button>
-        </div>
-      </div>
-
-      <div class="kls-row">
-        <input id="freq-search" type="text" class="kls-input" style="flex:1;min-width:200px;" placeholder="ハングル・読み・意味・動画タイトルで検索" />
-        <select id="freq-sort" class="kls-select" style="width:auto;">
-          <option value="total" selected>総出現回数が多い順</option>
-          <option value="videos">出現動画数が多い順</option>
-          <option value="recent">最近見た順</option>
-        </select>
-        <select id="freq-filter" class="kls-select" style="width:auto;">
-          <option value="all">すべて</option>
-          <option value="unlearned">未登録（覚える候補）</option>
-          <option value="saved">覚えるリスト登録済み</option>
-          <option value="mastered">習得済み</option>
-        </select>
-      </div>
-
-      <div id="freq-status" class="kls-muted"></div>
-      <div id="freq-word-list" class="kls-word-list"></div>
-
-      <details class="kls-card-box">
-        <summary style="cursor:pointer;font-weight:600;">記録済みの動画一覧（重複カウント防止リスト）</summary>
-        <div id="freq-video-list" class="kls-word-list" style="margin-top:10px;"></div>
-      </details>
-    </section>
-  </main>
+  <nav class="ui-bottom-nav" aria-label="モバイルナビゲーション">
+    <button data-mob-tab="card" type="button" class="ui-bottom-item is-active" aria-current="page">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="M7 10h10"></path></svg>
+      <span>カード</span>
+    </button>
+    <button data-mob-tab="cloze" type="button" class="ui-bottom-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+      <span>クイズ</span>
+    </button>
+    <button data-mob-tab="freq" type="button" class="ui-bottom-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+      <span>頻出</span>
+    </button>
+    <button data-mob-tab="list" type="button" class="ui-bottom-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+      <span>一覧</span>
+    </button>
+    <a href="options.html" class="ui-bottom-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.6.77 1 1.51 1H21a2 2 0 1 1 0 4h-.09c-.74 0-1.25.4-1.51 1z"></path></svg>
+      <span>設定</span>
+    </a>
+  </nav>
 
   <script src="lib/hangul.js"></script>
   <script src="lib/aligned.js"></script>

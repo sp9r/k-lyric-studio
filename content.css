@@ -2,13 +2,13 @@
   --kls-bg: #ffffff;
   --kls-subtle: #f7f8f9;
   --kls-text: #202328;
-  --kls-muted: #646c77;
+  --kls-muted: #737a84;
   --kls-border: #dfe2e6;
   --kls-primary: #25282d;
   --kls-primary-text: #ffffff;
-  --kls-accent: #3d6391;
-  --kls-success: #2f7d4d;
-  --kls-warn: #a16207;
+  --kls-accent: #4a6f9e;
+  --kls-success: #4c835f;
+  --kls-warn: #a66b1f;
   --kls-unseen: #cfd5dd;
   --kls-hanja: #7e22ce;
   /* Fonts are named explicitly: with only "Noto Sans KR/JP" (not installed on Windows) the

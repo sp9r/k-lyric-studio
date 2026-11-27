@@ -55,7 +55,8 @@
     spinner: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></svg>`,
     minus: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="5" y1="12" x2="19" y2="12"></line></svg>`,
     ban: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="4.9" y1="4.9" x2="19.1" y2="19.1"></line></svg>`,
-    close: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`
+    close: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`,
+    target: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"></circle><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line></svg>`
   };
 
   function hasChromeStorage() {
@@ -904,9 +905,9 @@
       <div class="kls-offset-row">
         <span>同期補正 (${state.offsetSec >= 0 ? "+" : ""}${state.offsetSec.toFixed(1)}s)</span>
         <div style="display:flex;gap:4px;">
-          <button type="button" class="kls-btn" data-act="offset-minus">-0.5s</button>
-          <button type="button" class="kls-btn" data-act="offset-plus">+0.5s</button>
-          <button type="button" class="kls-btn" data-act="offset-align">今の秒数に合わせる</button>
+          <button type="button" class="kls-btn" data-act="offset-minus">${ICONS.minus}<span>-0.5s</span></button>
+          <button type="button" class="kls-btn" data-act="offset-plus">${ICONS.plus}<span>+0.5s</span></button>
+          <button type="button" class="kls-btn" data-act="offset-align">${ICONS.target}<span>今の秒数に合わせる</span></button>
         </div>
       </div>
       <div class="kls-lines">${linesHtml}</div>
@@ -914,8 +915,8 @@
         <div class="kls-status-text">LRC形式（[00:12.30] 텍스트）または韓国語テキストを貼り付けて適用します。</div>
         <textarea class="kls-textarea" data-kls-lrc-input placeholder="[00:38.00] 이번엔 정말 좋아해"></textarea>
         <div style="display:flex;justify-content:flex-end;gap:6px;">
-          <button type="button" class="kls-btn" data-act="cancel-lrc">閉じる</button>
-          <button type="button" class="kls-btn is-primary" data-act="apply-lrc">テキストを適用</button>
+          <button type="button" class="kls-btn" data-act="cancel-lrc">${ICONS.close}<span>閉じる</span></button>
+          <button type="button" class="kls-btn is-primary" data-act="apply-lrc">${ICONS.check}<span>テキストを適用</span></button>
         </div>
       </div>
     `;

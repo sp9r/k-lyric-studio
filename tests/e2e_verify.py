@@ -21,6 +21,55 @@ def assert_no_overflow(page, label: str) -> None:
         raise AssertionError(f"Horizontal overflow detected on {label}")
 
 
+def assert_ui_standards(page, label: str, *, allow_empty_primary: bool = False) -> None:
+    res = page.evaluate("""() => {
+        const visible = (el) => {
+            if (!el) return false;
+            const det = el.closest('details');
+            if (det && !det.open) return false;
+            const st = getComputedStyle(el);
+            if (st.display === 'none' || st.visibility === 'hidden') return false;
+            const r = el.getBoundingClientRect();
+            return r.width > 0 && r.height > 0;
+        };
+        const btns = [...document.querySelectorAll('.kls-btn')]
+            .filter(visible)
+            .filter(b => !b.closest('#cloze-choices') && !b.closest('.kls-lrc-modal.kls-hidden'));
+        const missingIconOrText = btns
+            .filter(b => !b.querySelector('svg') || !b.innerText.trim())
+            .map(b => b.outerHTML.slice(0, 120));
+        const primaries = btns.filter(b => b.classList.contains('is-primary')).map(b => b.innerText.trim());
+        const sidebar = document.querySelector('.ui-sidebar');
+        const bottomNav = document.querySelector('.ui-bottom-nav');
+        const bottomItems = bottomNav ? [...bottomNav.querySelectorAll('.ui-bottom-item')].map(el => ({
+            text: el.innerText.trim(),
+            height: el.getBoundingClientRect().height,
+            hasSvg: Boolean(el.querySelector('svg'))
+        })) : [];
+        return {
+            missingIconOrText,
+            primaryCount: primaries.length,
+            primaries,
+            sidebarVisible: visible(sidebar),
+            sidebarWidth: sidebar ? Math.round(sidebar.getBoundingClientRect().width) : 0,
+            bottomVisible: visible(bottomNav),
+            bottomItems
+        };
+    }""")
+    assert not res["missingIconOrText"], f"{label}: Buttons missing SVG icon or text: {res['missingIconOrText']}"
+    if allow_empty_primary:
+        assert res["primaryCount"] <= 1, f"{label}: Too many primary buttons: {res['primaries']}"
+    else:
+        assert res["primaryCount"] <= 1, f"{label}: Expected <=1 primary button, got {res['primaries']}"
+    if res["sidebarVisible"]:
+        assert 192 <= res["sidebarWidth"] <= 220, f"{label}: Sidebar width out of range: {res['sidebarWidth']}"
+    if res["bottomVisible"]:
+        assert len(res["bottomItems"]) == 5, f"{label}: Expected 5 bottom nav items, got {res['bottomItems']}"
+        assert all(i["height"] >= 44 and i["hasSvg"] and i["text"] for i in res["bottomItems"]), (
+            f"{label}: Mobile bottom nav items invalid: {res['bottomItems']}"
+        )
+
+
 def run_e2e() -> None:
     handler = functools.partial(QuietHandler, directory=str(ROOT))
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
@@ -168,6 +217,11 @@ def run_e2e() -> None:
             assert pos["idx"] == "12" and pos["curVisible"] and pos["nextVisible"] and pos["nextNearBottom"] and pos["scrolled"], f"Current line position wrong: {pos}"
 
             assert_no_overflow(page, "player-desktop")
+            dock_btn_issues = page.evaluate("""() => [...document.querySelectorAll('.kls-dock .kls-btn')].filter(b => {
+                const r = b.getBoundingClientRect();
+                return r.width > 0 && r.height > 0 && (!b.querySelector('svg') || !b.innerText.trim());
+            }).map(b => b.outerHTML.slice(0, 120))""")
+            assert not dock_btn_issues, f"Dock buttons missing icon or text: {dock_btn_issues}"
             page.screenshot(path=str(DOCS / "screenshot-player.png"), full_page=False)
 
             # 2. Studio page (Desktop Light, Dark, Mobile)
@@ -177,14 +231,20 @@ def run_e2e() -> None:
 
             studio.goto(f"{base}/studio.html", wait_until="networkidle")
             studio.wait_for_selector("#card-surface")
+            assert_ui_standards(studio, "studio-card-front")
+            assert studio.evaluate("document.querySelector('.ui-sidebar') && getComputedStyle(document.querySelector('.ui-sidebar')).display !== 'none'")
+            assert studio.evaluate("getComputedStyle(document.querySelector('.ui-bottom-nav')).display === 'none'")
             studio.locator("#btn-card-reveal").click()
             assert not studio.locator("#card-answer").evaluate("el => el.classList.contains('kls-hidden')")
+            assert_ui_standards(studio, "studio-card-revealed")
             assert_no_overflow(studio, "studio-desktop-light")
+            studio.wait_for_timeout(160)
             studio.screenshot(path=str(DOCS / "screenshot-studio.png"), full_page=False)
 
             # Test cloze quiz
             studio.locator('[data-stab="cloze"]').click()
             studio.wait_for_selector("#cloze-choices button")
+            assert_ui_standards(studio, "studio-cloze")
             studio.locator("#cloze-choices button").first.click()
             assert not studio.locator("#cloze-feedback").evaluate("el => el.classList.contains('kls-hidden')")
 
@@ -192,6 +252,7 @@ def run_e2e() -> None:
             studio.locator('[data-stab="list"]').click()
             studio.fill("#list-search", "설레")
             assert studio.locator("#word-list-container .kls-word-item").count() >= 1
+            assert_ui_standards(studio, "studio-list")
 
             # Test frequent vocab log tab (seeded into localStorage) with multi-video title links
             studio.evaluate("""() => {
@@ -237,6 +298,7 @@ def run_e2e() -> None:
             )
             assert any("ILLIT - Magnetic MV" in l["text"] and "&t=42s" in l["href"] for l in card_occ_links), card_occ_links
             assert not studio.locator("#btn-card-video").evaluate("el => el.classList.contains('kls-hidden')")
+            studio.wait_for_timeout(160)
             studio.screenshot(path=str(DOCS / "screenshot-studio.png"), full_page=False)
             studio.locator('[data-stab="cloze"]').click()
             for _ in range(3):
@@ -256,6 +318,7 @@ def run_e2e() -> None:
             )
             assert any("ILLIT - Magnetic MV" in l["text"] and "&t=42s" in l["href"] for l in occ_links), occ_links
             assert any("ILLIT - Cherish" in l["text"] and "&t=65s" in l["href"] for l in occ_links), occ_links
+            assert_ui_standards(studio, "studio-freq")
             assert_no_overflow(studio, "studio-freq")
 
             # Add an unlearned frequent word into study cards and verify it appears in list with timestamped link
@@ -290,6 +353,7 @@ def run_e2e() -> None:
             pop_page.goto(f"{base}/popup.html", wait_until="networkidle")
             pop_page.wait_for_selector("#reading-modes button")
             assert "2語" in pop_page.locator("#popup-freq-stats").inner_text()
+            assert_ui_standards(pop_page, "popup-desktop")
             assert_no_overflow(pop_page, "popup-desktop")
             pop_page.locator("#btn-open-freq").click()
             pop_page.wait_for_url("**/studio.html#freq")
@@ -304,6 +368,7 @@ def run_e2e() -> None:
                 op.goto(f"{base}/options.html", wait_until="networkidle")
                 op.select_option("#opt-theme", theme)
                 assert op.evaluate("document.documentElement.getAttribute('data-theme')") == theme
+                assert_ui_standards(op, f"options-{theme}-{vp_w}x{vp_h}")
                 assert_no_overflow(op, f"options-{theme}-{vp_w}x{vp_h}")
                 rows = op.evaluate("""() => [...document.querySelectorAll('.kls-check-row')].map(row => {
                     const cb = row.querySelector('input[type="checkbox"]').getBoundingClientRect();
@@ -335,7 +400,7 @@ def run_e2e() -> None:
                 opt_page.locator(cid).click()
             saved = opt_page.evaluate("() => JSON.parse(localStorage.getItem('kls:settings') || '{}')")
             assert saved["readingMode"] == "katakana" and saved["showGloss"] is False and saved["showQuickRecord"] is False and saved["autoPauseOnClick"] is False and saved["shortcutsEnabled"] is False and saved["enableBridge"] is True, saved
-            opt_page.locator('a[href="studio.html#freq"]').click()
+            opt_page.locator('.ui-sidebar a[href="studio.html#freq"]').click()
             opt_page.wait_for_url("**/studio.html#freq")
             opt_page.wait_for_selector('[data-stab="freq"].is-active')
 
@@ -344,7 +409,22 @@ def run_e2e() -> None:
             mob_studio.on("pageerror", lambda err: errors.append(f"mobile studio pageerror: {err}"))
             mob_studio.on("console", lambda msg: errors.append(f"mobile studio console.{msg.type}: {msg.text}") if msg.type == "error" else None)
             mob_studio.goto(f"{base}/studio.html", wait_until="networkidle")
+            assert_ui_standards(mob_studio, "studio-mobile-card")
+            assert mob_studio.evaluate("getComputedStyle(document.querySelector('.ui-sidebar')).display === 'none'")
+            assert mob_studio.evaluate("getComputedStyle(document.querySelector('.ui-bottom-nav')).display === 'grid'")
             assert_no_overflow(mob_studio, "studio-mobile")
+            mob_studio.locator('[data-mob-tab="freq"]').click()
+            assert not mob_studio.locator("#pane-freq").evaluate("el => el.classList.contains('kls-hidden')")
+            assert_ui_standards(mob_studio, "studio-mobile-freq")
+            assert_no_overflow(mob_studio, "studio-mobile-freq")
+
+            mob_opt = mob_ctx.new_page()
+            mob_opt.on("pageerror", lambda err: errors.append(f"mobile options pageerror: {err}"))
+            mob_opt.on("console", lambda msg: errors.append(f"mobile options console.{msg.type}: {msg.text}") if msg.type == "error" else None)
+            mob_opt.goto(f"{base}/options.html", wait_until="networkidle")
+            assert_ui_standards(mob_opt, "options-mobile")
+            assert mob_opt.evaluate("getComputedStyle(document.querySelector('.ui-bottom-nav')).display === 'grid'")
+            assert_no_overflow(mob_opt, "options-mobile")
 
             browser.close()
     finally:

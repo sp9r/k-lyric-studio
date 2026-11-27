@@ -151,14 +151,17 @@
   async function testBridge() {
     const statusEl = document.getElementById("bridge-status");
     const url = document.getElementById("opt-bridge-url").value.trim() || "http://127.0.0.1:8788";
+    statusEl.className = "ui-status-dot is-accent";
     statusEl.textContent = "接続確認中...";
     try {
       const resp = await fetch(`${url.replace(/\/+$/, "")}/api/health`);
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const data = await resp.json();
-      statusEl.textContent = `接続成功 (モデル: ${data.llmModel || "設定済み"})`;
+      statusEl.className = "ui-status-dot is-success";
+      statusEl.textContent = `接続成功（応答モデル: ${data.llmModel || "利用可能"}）`;
     } catch (_) {
-      statusEl.textContent = "接続できません（ブリッジ未起動またはURL不一致）";
+      statusEl.className = "ui-status-dot is-danger";
+      statusEl.textContent = "接続できません（サーバー未起動または接続先が異なります）";
     }
   }
 

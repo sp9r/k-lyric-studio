@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "K-Lyric Studio | K-POP・韓国語動画学習",
   "short_name": "K-Lyric Studio",
-  "version": "1.7.4",
+  "version": "1.7.5",
   "description": "YouTube・YouTube Music の韓国語動画や K-POP 楽曲に、音変化反映の発音ガイド（カナ＋ローマ字）・同期字幕パネル・語尾分解・頻出単語帳を追加します。",
   "icons": {
     "16": "icons/16.png",
