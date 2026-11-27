@@ -123,6 +123,7 @@
     vocabLog: null,
     vocabRecordNote: "",
     newlyRecordedVideoId: "",
+    appliedSeekKey: "",
     quickStatus: {},
     meta: {
       isMusic: location.hostname === "music.youtube.com",
@@ -1104,6 +1105,32 @@
     return true;
   }
 
+  function parseStartSecFromUrl(href) {
+    try {
+      const t = new URL(href, location.href).searchParams.get("t");
+      if (!t) return 0;
+      if (/^\d+$/.test(t)) return Number(t);
+      const m = t.match(/^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s?)?$/i);
+      if (!m) return 0;
+      return (Number(m[1]) || 0) * 3600 + (Number(m[2]) || 0) * 60 + (Number(m[3]) || 0);
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  function maybeApplyUrlTimestampSeek(v) {
+    const vid = state.meta.videoId;
+    const sec = parseStartSecFromUrl(location.href);
+    if (!vid || sec <= 0 || !v || isActualAdPlaying(v)) return;
+    if (!Number.isFinite(v.duration) || v.duration <= sec) return;
+    const key = `${vid}|${sec}`;
+    if (state.appliedSeekKey === key) return;
+    state.appliedSeekKey = key;
+    if (Math.abs(v.currentTime - sec) > 3) {
+      v.currentTime = sec;
+    }
+  }
+
   function syncToCurrentTime() {
     const v = state.videoEl || findVideoElement();
     if (!v || !state.cues.length || !isActive()) {
@@ -1115,6 +1142,7 @@
       renderOverlay(null);
       return;
     }
+    maybeApplyUrlTimestampSeek(v);
     const t = v.currentTime;
 
     // 1-line loop enforcement

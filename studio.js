@@ -99,18 +99,40 @@
   }
 
   function itemOccurrences(item) {
-    if (Array.isArray(item && item.occurrences) && item.occurrences.length) {
-      return item.occurrences.filter((o) => o && o.url);
+    if (!item) return [];
+    const cardOccs = Array.isArray(item.occurrences) && item.occurrences.length
+      ? item.occurrences.filter((o) => o && o.url)
+      : item.sourceUrl
+        ? [{
+            videoId: "",
+            title: item.sourceTitle || "YouTube",
+            sec: item.timestampSec || 0,
+            url: item.sourceUrl
+          }]
+        : [];
+
+    const wordsMap = state.vocabLog && state.vocabLog.words;
+    let logOccs = [];
+    if (wordsMap) {
+      const candidates = [item.lemma, item.surface];
+      if (Dict && item.surface) {
+        const clean = Dict.cleanHangulWord ? Dict.cleanHangulWord(item.surface) : "";
+        const analyzed = Dict.analyzeToken ? Dict.analyzeToken(item.surface) : null;
+        if (analyzed && analyzed.lemma) candidates.push(analyzed.lemma);
+        if (clean) candidates.push(clean);
+      }
+      for (const k of candidates) {
+        if (k && wordsMap[k] && Array.isArray(wordsMap[k].occurrences) && wordsMap[k].occurrences.length) {
+          logOccs = wordsMap[k].occurrences;
+          break;
+        }
+      }
     }
-    if (item && item.sourceUrl) {
-      return [{
-        videoId: "",
-        title: item.sourceTitle || "YouTube",
-        sec: item.timestampSec || 0,
-        url: item.sourceUrl
-      }];
+
+    if (VocabLog && typeof VocabLog.mergeOccurrences === "function") {
+      return VocabLog.mergeOccurrences(cardOccs, logOccs);
     }
-    return [];
+    return cardOccs.length ? cardOccs : logOccs;
   }
 
   function renderOccurrencesHtml(occs, limit = 3) {
@@ -144,17 +166,23 @@
     }
 
     const occs = itemOccurrences(item);
-    document.getElementById("card-source-badge").textContent = `${item.sourceTitle || "出典"} · ${formatSec(item.timestampSec)}`;
     const primary = occs[0];
+    document.getElementById("card-source-badge").textContent = occs.length > 1
+      ? `出典 ${occs.length}件`
+      : primary
+        ? `${primary.title || "出典"} · ${formatSec(primary.sec)}`
+        : (item.sourceTitle || "出典なし");
     if (primary && primary.url) {
       vLink.href = primary.url;
-      vLink.querySelector("span").textContent = `${primary.title || "動画"} (${formatSec(primary.sec)})`;
+      vLink.querySelector("span").textContent = `該当部分を再生 (${formatSec(primary.sec)})`;
       vLink.classList.remove("kls-hidden");
     } else {
       vLink.classList.add("kls-hidden");
     }
     if (occBox) {
-      occBox.innerHTML = occs.length > 1 ? renderOccurrencesHtml(occs, 4) : "";
+      occBox.innerHTML = occs.length
+        ? `<div class="kls-source-label">出典（クリックで該当部分を再生）</div>${renderOccurrencesHtml(occs, 4)}`
+        : `<div class="kls-muted">視聴動画からの出典はまだありません（動画で登場すると自動で紐付きます）</div>`;
     }
 
     document.getElementById("card-surface").textContent = item.surface;
@@ -184,7 +212,29 @@
     if (!all.length) return;
     const item = all[state.clozeIdx % all.length];
     const q = SRS.buildClozeQuestion(item, all, state.clozeIdx);
-    document.getElementById("cloze-source").textContent = `${item.sourceTitle || "出典"} · ${formatSec(item.timestampSec)}`;
+    const occs = itemOccurrences(item);
+    const primary = occs[0];
+    document.getElementById("cloze-source").textContent = occs.length > 1
+      ? `出典 ${occs.length}件`
+      : primary
+        ? `${primary.title || "出典"} · ${formatSec(primary.sec)}`
+        : (item.sourceTitle || "穴埋めクイズ");
+    const cLink = document.getElementById("btn-cloze-video");
+    if (cLink) {
+      if (primary && primary.url) {
+        cLink.href = primary.url;
+        cLink.querySelector("span").textContent = `該当部分を再生 (${formatSec(primary.sec)})`;
+        cLink.classList.remove("kls-hidden");
+      } else {
+        cLink.classList.add("kls-hidden");
+      }
+    }
+    const cOccBox = document.getElementById("cloze-occurrences");
+    if (cOccBox) {
+      cOccBox.innerHTML = occs.length
+        ? `<div class="kls-source-label">出典（クリックで該当部分を再生）</div>${renderOccurrencesHtml(occs, 4)}`
+        : "";
+    }
     document.getElementById("cloze-prompt").textContent = q.promptLine;
     document.getElementById("cloze-ja").textContent = q.jaContext ? `訳: ${q.jaContext}` : "";
 
@@ -447,6 +497,20 @@
         renderAll();
       }
     });
+
+    if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged) {
+      chrome.storage.onChanged.addListener((changes) => {
+        if (changes.vocabLog && VocabLog) {
+          state.vocabLog = VocabLog.normalizeStore(changes.vocabLog.newValue);
+          renderAll();
+        }
+        if (changes.savedCards && changes.savedCards.newValue) {
+          state.savedCards = changes.savedCards.newValue;
+          buildQueue();
+          renderAll();
+        }
+      });
+    }
 
     document.getElementById("freq-search").oninput = renderFreqPane;
     document.getElementById("freq-sort").onchange = renderFreqPane;

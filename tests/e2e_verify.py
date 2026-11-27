@@ -221,6 +221,27 @@ def run_e2e() -> None:
                 }));
             }""")
             studio.reload(wait_until="networkidle")
+            # Advance past '같이' (due from mock) so the queued starter/saved card '설레잖아' is shown,
+            # verifying vocabLog occurrences merge into both Card and Cloze tabs.
+            while studio.locator("#card-surface").inner_text().strip() != "설레잖아":
+                studio.locator('.grade-btn[data-grade="4"]').click()
+            studio.wait_for_selector("#card-occurrences .kls-occ-link")
+            card_occ_links = studio.eval_on_selector_all(
+                "#card-occurrences .kls-occ-link",
+                "els => els.map(e => ({ text: e.textContent, href: e.getAttribute('href') }))"
+            )
+            assert any("ILLIT - Magnetic MV" in l["text"] and "&t=42s" in l["href"] for l in card_occ_links), card_occ_links
+            assert not studio.locator("#btn-card-video").evaluate("el => el.classList.contains('kls-hidden')")
+            studio.screenshot(path=str(DOCS / "screenshot-studio.png"), full_page=False)
+            studio.locator('[data-stab="cloze"]').click()
+            for _ in range(3):
+                if studio.locator("#cloze-occurrences .kls-occ-link").count() > 0:
+                    break
+                studio.locator("#btn-cloze-next").click()
+            studio.wait_for_selector("#cloze-occurrences .kls-occ-link")
+            cloze_href = studio.locator("#btn-cloze-video").get_attribute("href")
+            assert cloze_href and "&t=" in cloze_href, cloze_href
+
             studio.locator('[data-stab="freq"]').click()
             studio.wait_for_selector("#freq-word-list .kls-occ-link")
             occ_links = studio.eval_on_selector_all(

@@ -59,7 +59,7 @@
           </button>
           <a id="btn-card-video" href="#" target="_blank" rel="noopener" class="kls-btn">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-            <span>元動画の秒数を開く</span>
+            <span>該当部分を再生</span>
           </a>
         </div>
       </div>
@@ -67,7 +67,7 @@
       <div class="kls-card-box" style="text-align:center;display:grid;gap:8px;">
         <div id="card-surface" style="font-size:28px;font-weight:700;"></div>
         <div id="card-context" class="kls-muted" style="font-size:14px;"></div>
-        <div id="card-occurrences"></div>
+        <div id="card-occurrences" class="kls-source-box"></div>
         <div id="card-answer" class="kls-hidden" style="border-top:1px solid var(--ui-border);padding-top:10px;display:grid;gap:4px;">
           <div id="card-reading" style="font-size:14px;font-weight:600;color:var(--ui-accent);"></div>
           <div id="card-meaning" style="font-size:16px;font-weight:700;"></div>
@@ -106,16 +106,23 @@
     <section id="pane-cloze" class="kls-section kls-hidden" style="display:grid;gap:12px;">
       <div class="kls-row">
         <span id="cloze-source" class="kls-badge">穴埋めクイズ</span>
-        <button id="btn-cloze-speak" type="button" class="kls-btn">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
-          <span>文を読み上げ</span>
-        </button>
+        <div class="kls-seg">
+          <button id="btn-cloze-speak" type="button" class="kls-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+            <span>文を読み上げ</span>
+          </button>
+          <a id="btn-cloze-video" href="#" target="_blank" rel="noopener" class="kls-btn kls-hidden">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+            <span>該当部分を再生</span>
+          </a>
+        </div>
       </div>
 
       <div class="kls-card-box" style="text-align:center;display:grid;gap:6px;">
         <div id="cloze-prompt" style="font-size:20px;font-weight:700;"></div>
         <div id="cloze-ja" class="kls-muted"></div>
         <div id="cloze-feedback" class="kls-hidden" style="padding-top:8px;border-top:1px solid var(--ui-border);"></div>
+        <div id="cloze-occurrences" class="kls-source-box"></div>
       </div>
 
       <div id="cloze-choices" class="kls-grid-2"></div>
