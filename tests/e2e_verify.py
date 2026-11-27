@@ -88,6 +88,17 @@ def run_e2e() -> None:
             # Display rule row is shown with the reason (mock title contains ILLIT)
             assert "ILLIT" in page.locator(".kls-activation-row").inner_text()
 
+            # Frequent vocab book shortcut button sits next to studio button and triggers kls:open-studio {tab: "freq"}
+            assert page.locator('[data-act="vocab-book"]').inner_text().strip() == "頻出単語帳"
+            sent_msg = page.evaluate("""() => {
+                let captured = null;
+                window.chrome = { runtime: { sendMessage: (m, cb) => { captured = m; if (cb) cb({ ok: true }); } } };
+                document.querySelector('[data-act="vocab-book"]').click();
+                delete window.chrome;
+                return captured;
+            }""")
+            assert sent_msg == {"type": "kls:open-studio", "tab": "freq"}, f"Unexpected vocab-book message: {sent_msg}"
+
             # The playing line sits second from the bottom, with the next line visible below it
             page.evaluate("""() => {
                 const cues = Array.from({ length: 24 }, (_, i) => ({ id: i, start: i * 4, end: i * 4 + 3.8, ko: '이번엔 정말 좋아해 ' + (i + 1), ja: '今度は本当に好きだよ' }));
@@ -182,22 +193,80 @@ def run_e2e() -> None:
             )
             assert any("ILLIT - Magnetic MV" in l["text"] and "&t=18s" in l["href"] for l in list_occ), list_occ
 
-            # 3. Popup & Options (Desktop + Dark + Mobile)
+            # 3. Direct hash route studio.html#freq + hashchange
+            freq_page = ctx.new_page()
+            freq_page.on("pageerror", lambda err: errors.append(f"studio#freq pageerror: {err}"))
+            freq_page.on("console", lambda msg: errors.append(f"studio#freq console.{msg.type}: {msg.text}") if msg.type == "error" else None)
+            freq_page.goto(f"{base}/studio.html#freq", wait_until="networkidle")
+            freq_page.wait_for_selector('[data-stab="freq"].is-active')
+            assert not freq_page.locator("#pane-freq").evaluate("el => el.classList.contains('kls-hidden')")
+            assert_no_overflow(freq_page, "studio-hash-freq")
+            freq_page.goto(f"{base}/studio.html", wait_until="networkidle")
+            freq_page.wait_for_selector('[data-stab="card"].is-active')
+            freq_page.evaluate("() => { location.hash = '#freq'; }")
+            freq_page.wait_for_selector('[data-stab="freq"].is-active')
+            assert not freq_page.locator("#pane-freq").evaluate("el => el.classList.contains('kls-hidden')")
+
+            # 4. Popup (with vocabLog count + 1-click freq shortcut)
             pop_page = ctx.new_page()
             pop_page.on("pageerror", lambda err: errors.append(f"popup pageerror: {err}"))
+            pop_page.on("console", lambda msg: errors.append(f"popup console.{msg.type}: {msg.text}") if msg.type == "error" else None)
             pop_page.goto(f"{base}/popup.html", wait_until="networkidle")
             pop_page.wait_for_selector("#reading-modes button")
+            assert "2語" in pop_page.locator("#popup-freq-stats").inner_text()
+            assert_no_overflow(pop_page, "popup-desktop")
+            pop_page.locator("#btn-open-freq").click()
+            pop_page.wait_for_url("**/studio.html#freq")
+            pop_page.wait_for_selector('[data-stab="freq"].is-active')
+
+            # 5. Options (Light/Dark x 1280x900, 640x800, 390x844 + auto-save + #freq link)
+            def check_options_layout(vp_w: int, vp_h: int, theme: str) -> None:
+                opt_ctx = browser.new_context(viewport={"width": vp_w, "height": vp_h})
+                op = opt_ctx.new_page()
+                op.on("pageerror", lambda err: errors.append(f"options({theme},{vp_w}x{vp_h}) pageerror: {err}"))
+                op.on("console", lambda msg: errors.append(f"options({theme},{vp_w}x{vp_h}) console.{msg.type}: {msg.text}") if msg.type == "error" else None)
+                op.goto(f"{base}/options.html", wait_until="networkidle")
+                op.select_option("#opt-theme", theme)
+                assert op.evaluate("document.documentElement.getAttribute('data-theme')") == theme
+                assert_no_overflow(op, f"options-{theme}-{vp_w}x{vp_h}")
+                rows = op.evaluate("""() => [...document.querySelectorAll('.kls-check-row')].map(row => {
+                    const cb = row.querySelector('input[type="checkbox"]').getBoundingClientRect();
+                    const sp = row.querySelector('span').getBoundingClientRect();
+                    return { id: row.querySelector('input').id, cbTop: cb.top, spTop: sp.top, cbRight: cb.right, spLeft: sp.left, topDiff: Math.abs(cb.top - sp.top) };
+                })""")
+                assert len(rows) == 6, f"Expected 6 check rows, got {len(rows)}"
+                for r in rows:
+                    assert r["topDiff"] <= 6 and r["cbRight"] <= r["spLeft"], f"Checkbox misaligned at {theme} {vp_w}x{vp_h}: {r}"
+                if vp_w >= 640:
+                    bridge_diff = op.evaluate("""() => {
+                        const inp = document.getElementById('opt-bridge-url').getBoundingClientRect();
+                        const btn = document.getElementById('btn-test-bridge').getBoundingClientRect();
+                        return Math.abs(inp.bottom - btn.bottom);
+                    }""")
+                    assert bridge_diff <= 4, f"Bridge input and button misaligned ({bridge_diff}px) at {theme} {vp_w}x{vp_h}"
+                opt_ctx.close()
+
+            for theme in ("light", "dark"):
+                for vp_w, vp_h in ((1280, 900), (640, 800), (390, 844)):
+                    check_options_layout(vp_w, vp_h, theme)
 
             opt_page = ctx.new_page()
             opt_page.on("pageerror", lambda err: errors.append(f"options pageerror: {err}"))
+            opt_page.on("console", lambda msg: errors.append(f"options console.{msg.type}: {msg.text}") if msg.type == "error" else None)
             opt_page.goto(f"{base}/options.html", wait_until="networkidle")
-            opt_page.select_option("#opt-theme", "dark")
-            assert opt_page.evaluate("document.documentElement.getAttribute('data-theme')") == "dark"
-            assert_no_overflow(opt_page, "options-desktop-dark")
+            opt_page.select_option("#opt-reading", "katakana")
+            for cid in ("#opt-gloss", "#opt-autopause", "#opt-shortcuts", "#opt-bridge"):
+                opt_page.locator(cid).click()
+            saved = opt_page.evaluate("() => JSON.parse(localStorage.getItem('kls:settings') || '{}')")
+            assert saved["readingMode"] == "katakana" and saved["showGloss"] is False and saved["autoPauseOnClick"] is False and saved["shortcutsEnabled"] is False and saved["enableBridge"] is True, saved
+            opt_page.locator('a[href="studio.html#freq"]').click()
+            opt_page.wait_for_url("**/studio.html#freq")
+            opt_page.wait_for_selector('[data-stab="freq"].is-active')
 
             mob_ctx = browser.new_context(viewport={"width": 390, "height": 844})
             mob_studio = mob_ctx.new_page()
             mob_studio.on("pageerror", lambda err: errors.append(f"mobile studio pageerror: {err}"))
+            mob_studio.on("console", lambda msg: errors.append(f"mobile studio console.{msg.type}: {msg.text}") if msg.type == "error" else None)
             mob_studio.goto(f"{base}/studio.html", wait_until="networkidle")
             assert_no_overflow(mob_studio, "studio-mobile")
 

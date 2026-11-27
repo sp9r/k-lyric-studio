@@ -414,6 +414,11 @@
     renderAll();
   }
 
+  function tabFromHash() {
+    const h = String(location.hash || "").replace(/^#/, "").trim();
+    return ["card", "cloze", "list", "freq"].includes(h) ? h : "";
+  }
+
   async function init() {
     const res = await storageGet(["savedCards", "vocabLog", "settings"]);
     if (res.settings) state.settings = { ...state.settings, ...res.settings };
@@ -426,8 +431,18 @@
       }
       await storageSet({ savedCards: state.savedCards });
     }
+    const hashTab = tabFromHash();
+    if (hashTab) state.tab = hashTab;
     buildQueue();
     renderAll();
+
+    window.addEventListener("hashchange", () => {
+      const next = tabFromHash();
+      if (next && next !== state.tab) {
+        state.tab = next;
+        renderAll();
+      }
+    });
 
     document.getElementById("freq-search").oninput = renderFreqPane;
     document.getElementById("freq-sort").onchange = renderFreqPane;

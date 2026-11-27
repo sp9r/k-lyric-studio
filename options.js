@@ -49,7 +49,7 @@
     document.getElementById("opt-reading").value = settings.readingMode || "hybrid";
     document.getElementById("opt-overlay").checked = settings.showOverlay !== false;
     document.getElementById("opt-hanja").checked = settings.showHanja !== false;
-  document.getElementById("opt-gloss").checked = settings.showGloss !== false;
+    document.getElementById("opt-gloss").checked = settings.showGloss !== false;
     document.getElementById("opt-autopause").checked = Boolean(settings.autoPauseOnClick);
     document.getElementById("opt-shortcuts").checked = Boolean(settings.shortcutsEnabled);
     document.getElementById("opt-bridge").checked = Boolean(settings.enableBridge);
@@ -165,8 +165,13 @@
     activation = Act.normalize(res.activation);
     syncForm();
     renderActivation();
+    document.getElementById("opt-reading").onchange = save;
     document.getElementById("opt-overlay").onchange = save;
     document.getElementById("opt-hanja").onchange = save;
+    document.getElementById("opt-gloss").onchange = save;
+    document.getElementById("opt-autopause").onchange = save;
+    document.getElementById("opt-shortcuts").onchange = save;
+    document.getElementById("opt-bridge").onchange = save;
 
     document.getElementById("btn-save").onclick = save;
     document.getElementById("opt-theme").onchange = save;

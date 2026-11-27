@@ -175,9 +175,17 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     return true;
   }
 
+  if (msg.type === "kls:open-studio") {
+    const tab = ["card", "cloze", "list", "freq"].includes(msg.tab) ? `#${msg.tab}` : "";
+    chrome.tabs.create({ url: chrome.runtime.getURL(`studio.html${tab}`) });
+    sendResponse({ ok: true });
+    return false;
+  }
+
   if (msg.type === "kls:open-page") {
     const page = msg.page === "options" ? "options.html" : "studio.html";
-    chrome.tabs.create({ url: chrome.runtime.getURL(page) });
+    const hash = page === "studio.html" && ["card", "cloze", "list", "freq"].includes(msg.tab) ? `#${msg.tab}` : "";
+    chrome.tabs.create({ url: chrome.runtime.getURL(`${page}${hash}`) });
     sendResponse({ ok: true });
     return false;
   }

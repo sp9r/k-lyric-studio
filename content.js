@@ -39,6 +39,7 @@
     paste: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1"></rect></svg>`,
     refresh: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>`,
     cards: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="M7 10h10"></path><path d="M7 14h6"></path></svg>`,
+    book: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>`,
     play: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`,
     volume: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>`,
     bookmark: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>`,
@@ -842,6 +843,7 @@
         <button type="button" class="kls-btn${state.showLrcBox ? " is-active" : ""}" data-act="toggle-lrc">${ICONS.paste}<span>歌詞・LRC貼付</span></button>
         <button type="button" class="kls-btn" data-act="reload">${ICONS.refresh}<span>再取得</span></button>
         <button type="button" class="kls-btn" data-act="studio">${ICONS.cards}<span>復習スタジオ</span></button>
+        <button type="button" class="kls-btn" data-act="vocab-book">${ICONS.book}<span>頻出単語帳</span></button>
         ${state.settings.enableBridge ? `<button type="button" class="kls-btn" data-act="transcribe">${ICONS.spark}<span>AI字幕生成</span></button>` : ""}
       </div>
       <div class="kls-offset-row">
@@ -962,6 +964,7 @@
     };
     dock.querySelector('[data-act="reload"]').onclick = () => loadSubtitlesForMeta(true);
     dock.querySelector('[data-act="studio"]').onclick = () => sendBg({ type: "kls:open-page", page: "studio" });
+    dock.querySelector('[data-act="vocab-book"]').onclick = () => sendBg({ type: "kls:open-studio", tab: "freq" });
 
     const trBtn = dock.querySelector('[data-act="transcribe"]');
     if (trBtn) {

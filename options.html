@@ -5,16 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>K-Lyric Studio 設定</title>
   <link rel="stylesheet" href="ui.css" />
-  <style>
-    .kls-site-card { display: grid; gap: 8px; align-content: start; padding: 10px; border: 1px solid var(--kls-border, #d0d5dc); border-radius: 8px; }
-    .kls-site-card h3 { margin: 0; font-size: 14px; }
-    .kls-rule-list { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
-    .kls-rule-item { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 4px 6px; border-radius: 6px; background: var(--kls-subtle, rgba(127,127,127,0.08)); }
-    .kls-rule-item span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .kls-rule-head { font-size: 12px; font-weight: 600; margin-top: 4px; }
-    .kls-add-row { display: flex; gap: 6px; }
-    .kls-add-row input { flex: 1; min-width: 0; }
-  </style>
 </head>
 <body>
   <main class="kls-options-wrap">
@@ -23,10 +13,16 @@
         <img src="icons/icon.svg" alt="" />
         <span>K-Lyric Studio 設定</span>
       </div>
-      <a href="studio.html" class="kls-btn">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="M7 10h10"></path></svg>
-        <span>復習スタジオへ</span>
-      </a>
+      <div class="kls-seg">
+        <a href="studio.html#freq" class="kls-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+          <span>頻出単語帳</span>
+        </a>
+        <a href="studio.html" class="kls-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="M7 10h10"></path></svg>
+          <span>復習スタジオへ</span>
+        </a>
+      </div>
     </header>
 
     <section class="kls-section">
@@ -53,49 +49,49 @@
       </div>
     </section>
 
-    <section class="kls-section" style="display:grid;gap:12px;">
-      <h2 class="kls-title" style="margin:0;">表示する動画</h2>
-      <p class="kls-muted" style="margin:0;">YouTube は登録したチャンネル・動画・キーワードに当てはまる動画だけ、YouTube Music は「非表示」に登録したもの以外のすべてで字幕とパネルを出します。動画の右下に出る「この動画で表示」「このチャンネルでは非表示」からも登録できます。</p>
+    <section class="kls-section kls-section-stack">
+      <h2 class="kls-title">表示する動画</h2>
+      <p class="kls-muted">YouTube は登録したチャンネル・動画・キーワードに当てはまる動画だけ、YouTube Music は「非表示」に登録したもの以外のすべてで字幕とパネルを出します。動画の右下に出る「この動画で表示」「このチャンネルでは非表示」からも登録できます。</p>
       <div class="kls-grid-2" id="activation-sites"></div>
     </section>
 
-    <section class="kls-section" style="display:grid;gap:8px;">
-      <h2 class="kls-title" style="margin:0;">再生操作とショートカット</h2>
-      <label class="kls-row" style="justify-content:flex-start;">
+    <section class="kls-section kls-section-stack">
+      <h2 class="kls-title">再生操作とショートカット</h2>
+      <label class="kls-check-row">
         <input id="opt-overlay" type="checkbox" />
         <span>動画の上に字幕を表示する（パネルの「動画の字幕」ボタンでも切り替え）</span>
       </label>
-      <label class="kls-row" style="justify-content:flex-start;">
+      <label class="kls-check-row">
         <input id="opt-hanja" type="checkbox" />
         <span>漢字語に漢字を表示する（日本語訳に同じ読みの漢字があるときだけ。パネルの「漢字」ボタンでも切り替え）</span>
       </label>
-      <label class="kls-row" style="justify-content:flex-start;">
+      <label class="kls-check-row">
         <input id="opt-gloss" type="checkbox" />
         <span>単語ごとに短い日本語訳を表示する（内蔵辞書にない単語は機械翻訳。パネルの「単語訳」ボタンでも切り替え）</span>
       </label>
-      <label class="kls-row" style="justify-content:flex-start;">
+      <label class="kls-check-row">
         <input id="opt-autopause" type="checkbox" />
         <span>単語クリック時に動画を自動で一時停止する</span>
       </label>
-      <label class="kls-row" style="justify-content:flex-start;">
+      <label class="kls-check-row">
         <input id="opt-shortcuts" type="checkbox" />
         <span>キーボードショートカットを有効にする（A: 前の行 / D: 次の行 / S: 1行リピート / R: 読み方切替）</span>
       </label>
     </section>
 
-    <section class="kls-section" style="display:grid;gap:10px;">
-      <h2 class="kls-title" style="margin:0;">ローカルAIブリッジ連携（オプション）</h2>
-      <p class="kls-muted" style="margin:0;">既定はオフです。有効にすると、字幕がない動画の Whisper 文字起こしと Qwen3.6 文脈解説ボタンをローカルサーバー経由で利用できます。</p>
-      <label class="kls-row" style="justify-content:flex-start;">
+    <section class="kls-section kls-section-stack">
+      <h2 class="kls-title">ローカルAIブリッジ連携（オプション）</h2>
+      <p class="kls-muted">既定はオフです。有効にすると、字幕がない動画の Whisper 文字起こしと Qwen3.6 文脈解説ボタンをローカルサーバー経由で利用できます。</p>
+      <label class="kls-check-row">
         <input id="opt-bridge" type="checkbox" />
         <span>ローカルAIブリッジを利用する</span>
       </label>
-      <div class="kls-row">
-        <div style="flex:1;min-width:220px;">
+      <div class="kls-bridge-row">
+        <div class="kls-bridge-field">
           <label class="kls-muted" for="opt-bridge-url">ブリッジ URL</label>
           <input id="opt-bridge-url" type="text" class="kls-input" placeholder="http://127.0.0.1:8788" />
         </div>
-        <button id="btn-test-bridge" type="button" class="kls-btn" style="margin-top:18px;">
+        <button id="btn-test-bridge" type="button" class="kls-btn">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
           <span>接続テスト</span>
         </button>

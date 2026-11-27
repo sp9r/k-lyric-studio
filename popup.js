@@ -43,9 +43,19 @@
 
   let settings = { ...DEFAULT_SETTINGS };
   let savedCards = {};
+  let vocabLog = null;
 
   function applyTheme(t) {
     document.documentElement.setAttribute("data-theme", t || "system");
+  }
+
+  function openStudioPage(hash) {
+    const page = hash ? `studio.html#${hash}` : "studio.html";
+    if (typeof chrome !== "undefined" && chrome.tabs) {
+      chrome.tabs.create({ url: chrome.runtime.getURL(page) });
+    } else {
+      location.href = page;
+    }
   }
 
   function render() {
@@ -79,12 +89,26 @@
     const lPct = total ? Math.max(0, 100 - mPct) : 0;
     document.getElementById("bar-mastered").style.width = `${mPct}%`;
     document.getElementById("bar-learning").style.width = `${lPct}%`;
+
+    const freqEl = document.getElementById("popup-freq-stats");
+    if (freqEl) {
+      const freqWords = Object.keys((vocabLog && vocabLog.words) || {}).length;
+      const freqVideos = Object.keys((vocabLog && vocabLog.videos) || {}).length;
+      if (freqWords > 0) {
+        freqEl.textContent = `頻出単語帳: ${freqWords}語（${freqVideos}動画から記録）`;
+        freqEl.classList.remove("kls-hidden");
+      } else {
+        freqEl.textContent = "";
+        freqEl.classList.add("kls-hidden");
+      }
+    }
   }
 
   async function init() {
-    const res = await storageGet(["settings", "savedCards"]);
+    const res = await storageGet(["settings", "savedCards", "vocabLog"]);
     if (res.settings) settings = { ...DEFAULT_SETTINGS, ...res.settings };
     if (res.savedCards) savedCards = res.savedCards;
+    if (res.vocabLog && typeof res.vocabLog === "object") vocabLog = res.vocabLog;
     render();
 
     document.getElementById("btn-enabled").onclick = async () => {
@@ -92,13 +116,8 @@
       await storageSet({ settings });
       render();
     };
-    document.getElementById("btn-open-studio").onclick = () => {
-      if (typeof chrome !== "undefined" && chrome.tabs) {
-        chrome.tabs.create({ url: chrome.runtime.getURL("studio.html") });
-      } else {
-        location.href = "studio.html";
-      }
-    };
+    document.getElementById("btn-open-studio").onclick = () => openStudioPage("");
+    document.getElementById("btn-open-freq").onclick = () => openStudioPage("freq");
     document.getElementById("btn-open-options").onclick = () => {
       if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.openOptionsPage) {
         chrome.runtime.openOptionsPage();
