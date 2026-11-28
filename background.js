@@ -2,6 +2,39 @@ const lrcCache = new Map();
 const trCache = new Map();
 const TR_ENDPOINT = "https://translate.googleapis.com/translate_a/single";
 
+// The review studio embeds YouTube players inside an extension page. YouTube refuses embeds that
+// carry no http(s) Referer (error 153), so requests for the embed frame made by this extension's own
+// pages get a fixed Referer. Pages of other sites are not touched.
+async function ensureEmbedRefererRule() {
+  try {
+    if (!chrome.declarativeNetRequest || !chrome.declarativeNetRequest.updateDynamicRules) return;
+    const host = new URL(chrome.runtime.getURL("")).hostname;
+    await chrome.declarativeNetRequest.updateDynamicRules({
+      removeRuleIds: [9001],
+      addRules: [
+        {
+          id: 9001,
+          priority: 1,
+          action: {
+            type: "modifyHeaders",
+            requestHeaders: [{ header: "Referer", operation: "set", value: "https://github.com/sp9r/k-lyric-studio" }]
+          },
+          condition: {
+            requestDomains: ["youtube-nocookie.com"],
+            resourceTypes: ["sub_frame"],
+            initiatorDomains: [host]
+          }
+        }
+      ]
+    });
+  } catch (e) {
+    console.warn("[K-Lyric] embed referer rule:", e && e.message);
+  }
+}
+ensureEmbedRefererRule();
+if (chrome.runtime && chrome.runtime.onInstalled) chrome.runtime.onInstalled.addListener(ensureEmbedRefererRule);
+if (chrome.runtime && chrome.runtime.onStartup) chrome.runtime.onStartup.addListener(ensureEmbedRefererRule);
+
 function hasHangul(s) {
   return /[\uAC00-\uD7A3]/.test(String(s || ""));
 }

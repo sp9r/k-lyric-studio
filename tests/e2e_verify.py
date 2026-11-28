@@ -267,8 +267,8 @@ def run_e2e() -> None:
                             key: '설레다', lemma: '설레다', surfaceSample: '설레잖아', meaning: 'ときめく', pos: '動詞',
                             videoCount: 2, totalCount: 3, lastSeenAt: 2000,
                             occurrences: [
-                                { videoId: 'v1', title: 'ILLIT - Magnetic MV', isMusic: false, sec: 42, url: 'https://www.youtube.com/watch?v=v1&t=42s', surface: '설레잖아', context: '설레잖아' },
-                                { videoId: 'v2', title: 'ILLIT - Cherish', isMusic: true, sec: 65, url: 'https://music.youtube.com/watch?v=v2&t=65s', surface: '설레고', context: '설레고' }
+                                { videoId: 'v1', title: 'ILLIT - Magnetic MV', isMusic: false, sec: 42, url: 'https://www.youtube.com/watch?v=v1&t=42s', surface: '설레잖아', context: '오늘 정말 설레잖아', jaContext: '今日すごくときめくよね' },
+                                { videoId: 'v2', title: 'ILLIT - Cherish', isMusic: true, sec: 65, url: 'https://music.youtube.com/watch?v=v2&t=65s', surface: '설레고', context: '설레고 있어 너 때문에', jaContext: 'ときめいてる 君のせいで' }
                             ]
                         },
                         '기분': {
@@ -298,6 +298,36 @@ def run_e2e() -> None:
             )
             assert any("ILLIT - Magnetic MV" in l["text"] and "&t=42s" in l["href"] for l in card_occ_links), card_occ_links
             assert not studio.locator("#btn-card-video").evaluate("el => el.classList.contains('kls-hidden')")
+            # Example sentences: YouTube Music line first, highlighted word, source with m:ss
+            ex_items = studio.eval_on_selector_all(
+                "#card-examples .kls-ex-item",
+                "els => els.map(e => ({ ko: e.querySelector('.kls-ex-ko').textContent, music: !!e.querySelector('.kls-ex-tag'), time: e.querySelector('.kls-occ-time').textContent }))"
+            )
+            assert 2 <= len(ex_items) <= 3 and ex_items[0]["music"] and "너 때문에" in ex_items[0]["ko"] and ex_items[0]["time"] == "1:05", ex_items
+            assert not any(i["music"] for i in ex_items[1:]), ex_items
+            assert studio.locator("#card-examples mark").count() >= 1
+            # Source links play inline (no new tab); hidden until clicked, one at a time, toggle/close
+            assert studio.locator(".kls-embed").count() == 0
+            assert not studio.eval_on_selector_all("#card-occurrences a, #card-examples a, #btn-card-video", "els => els.some(e => e.getAttribute('target') === '_blank')")
+            pages_before = len(ctx.pages)
+            studio.locator("#card-examples .kls-occ-link").first.click()
+            studio.wait_for_selector(".kls-embed iframe")
+            assert len(ctx.pages) == pages_before, "source click must not open a new tab"
+            src = studio.locator(".kls-embed iframe").get_attribute("src")
+            assert src.startswith("https://www.youtube-nocookie.com/embed/v2?") and "start=65" in src and "autoplay=1" in src, src
+            studio.locator("#card-occurrences .kls-occ-link").first.click()
+            assert studio.locator(".kls-embed").count() == 1, "only one player may be open"
+            assert "start=42" in studio.locator(".kls-embed iframe").get_attribute("src") or "start=65" in studio.locator(".kls-embed iframe").get_attribute("src")
+            assert_ui_standards(studio, "studio-card-embed")
+            assert_no_overflow(studio, "studio-card-embed")
+            studio.locator(".kls-embed-close").click()
+            assert studio.locator(".kls-embed").count() == 0
+            studio.locator("#card-examples .kls-occ-link").first.click()
+            studio.locator("#card-examples .kls-occ-link").first.click()
+            assert studio.locator(".kls-embed").count() == 0, "second click on the same source closes the player"
+            studio.locator("#btn-card-video").click()
+            assert studio.locator(".kls-embed").count() == 1 and len(ctx.pages) == pages_before
+            studio.locator(".kls-embed-close").click()
             studio.wait_for_timeout(160)
             studio.screenshot(path=str(DOCS / "screenshot-studio.png"), full_page=False)
             studio.locator('[data-stab="cloze"]').click()
@@ -308,6 +338,9 @@ def run_e2e() -> None:
             studio.wait_for_selector("#cloze-occurrences .kls-occ-link")
             cloze_href = studio.locator("#btn-cloze-video").get_attribute("href")
             assert cloze_href and "&t=" in cloze_href, cloze_href
+            assert studio.locator("#cloze-examples .kls-ex-item").count() == 0, "examples must not leak the answer before answering"
+            studio.locator("#cloze-choices button").first.click()
+            assert studio.locator("#cloze-examples .kls-ex-item").count() >= 1, "examples are shown with the answer"
 
             studio.locator('[data-stab="freq"]').click()
             assert studio.locator("#freq-sort").input_value() == "total", "freq-sort must default to total"
@@ -318,6 +351,7 @@ def run_e2e() -> None:
             )
             assert any("ILLIT - Magnetic MV" in l["text"] and "&t=42s" in l["href"] for l in occ_links), occ_links
             assert any("ILLIT - Cherish" in l["text"] and "&t=65s" in l["href"] for l in occ_links), occ_links
+            assert studio.locator("#freq-word-list .kls-ex-item").count() >= 2
             assert_ui_standards(studio, "studio-freq")
             assert_no_overflow(studio, "studio-freq")
 

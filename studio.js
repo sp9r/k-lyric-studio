@@ -216,7 +216,10 @@
     if (seenBar) seenBar.style.width = `${sPct}%`;
   }
 
+  let lastRenderedTab = null;
   function renderTabs() {
+    if (lastRenderedTab !== state.tab) closeEmbeds();
+    lastRenderedTab = state.tab;
     document.querySelectorAll("[data-stab]").forEach((b) => {
       const active = b.dataset.stab === state.tab;
       b.classList.toggle("is-active", active);
@@ -275,20 +278,125 @@
     return cardOccs.length ? cardOccs : logOccs;
   }
 
+  function occVideoId(o) {
+    if (!o) return "";
+    return String(o.videoId || (VocabLog && VocabLog.parseVideoId ? VocabLog.parseVideoId(o.url) : "") || "").trim();
+  }
+
+  // Source links open an inline player (see toggleEmbed); href stays as a plain-link fallback.
+  function occLinkHtml(o, extraClass = "") {
+    const title = esc(o.title || "YouTube");
+    const ts = formatSec(o.sec);
+    const tip = o.context ? `${title} (${ts}) — ${esc(o.context)}` : `${title} (${ts})`;
+    const vid = occVideoId(o);
+    const attrs = vid ? ` data-embed-vid="${esc(vid)}" data-embed-sec="${Math.max(0, Math.floor(Number(o.sec) || 0))}" data-embed-url="${esc(o.url)}"` : "";
+    return `<a class="kls-occ-link${extraClass}" href="${esc(o.url)}"${attrs} title="${tip}">${PLAY_ICON}<span class="kls-occ-title">${title}</span><span class="kls-occ-time">${ts}</span></a>`;
+  }
+
   function renderOccurrencesHtml(occs, limit = 3) {
     if (!occs.length) return "";
-    const makeLink = (o) => {
-      const title = esc(o.title || "YouTube");
-      const ts = formatSec(o.sec);
-      const tip = o.context ? `${title} (${ts}) — ${esc(o.context)}` : `${title} (${ts})`;
-      return `<a class="kls-occ-link" href="${esc(o.url)}" target="_blank" rel="noopener" title="${tip}">${PLAY_ICON}<span class="kls-occ-title">${title}</span><span class="kls-occ-time">${ts}</span></a>`;
-    };
-    const head = occs.slice(0, limit).map(makeLink).join("");
+    const head = occs.slice(0, limit).map((o) => occLinkHtml(o)).join("");
     const rest = occs.slice(limit);
     const tail = rest.length
-      ? `<details class="kls-occ-more"><summary>ほか ${rest.length}件の動画・タイムスタンプを選んで飛ぶ</summary><div class="kls-occ-wrap">${rest.map(makeLink).join("")}</div></details>`
+      ? `<details class="kls-occ-more"><summary>ほか ${rest.length}件の動画・タイムスタンプを選んで再生</summary><div class="kls-occ-wrap">${rest.map((o) => occLinkHtml(o)).join("")}</div></details>`
       : "";
     return `<div class="kls-occ-wrap">${head}</div>${tail}`;
+  }
+
+  function highlightWord(text, surface) {
+    const t = String(text || "");
+    const w = String(surface || "");
+    const idx = w ? t.indexOf(w) : -1;
+    if (idx < 0) return esc(t);
+    return `${esc(t.slice(0, idx))}<mark>${esc(w)}</mark>${esc(t.slice(idx + w.length))}`;
+  }
+
+  // Example sentences = real lines the word appeared in. YouTube Music first, max `limit`.
+  function renderExamplesHtml(occs, limit = 3, fallback) {
+    if (!VocabLog || !VocabLog.pickExamples) return "";
+    let list = occs;
+    if (fallback && fallback.context && !occs.some((o) => o && o.context) && occs[0]) {
+      list = [{ ...occs[0], context: fallback.context, jaContext: fallback.jaContext || "", surface: fallback.surface }].concat(occs);
+    }
+    const ex = VocabLog.pickExamples(list, limit);
+    if (!ex.items.length) return "";
+    const items = ex.items.map((o) => `
+      <li class="kls-ex-item">
+        <div class="kls-ex-ko" lang="ko">${highlightWord(o.context, o.surface || (fallback && fallback.surface))}</div>
+        ${o.jaContext ? `<div class="kls-ex-ja" lang="ja">${esc(o.jaContext)}</div>` : ""}
+        <div class="kls-ex-src">${o.isMusic ? `<span class="kls-ex-tag">Music</span>` : ""}${occLinkHtml(o)}</div>
+      </li>`).join("");
+    const more = ex.more ? `<div class="kls-ex-more">他${ex.more}件</div>` : "";
+    return `<div class="kls-source-label">例文${ex.items.some((o) => o.isMusic) ? "（YouTube Music優先）" : ""}</div><ul class="kls-ex-list">${items}</ul>${more}`;
+  }
+
+  // ---- inline player (one at a time, hidden until a source is clicked) ----
+  // Re-render only when the markup changed, so an open player is not reloaded by unrelated redraws.
+  function setHtml(el, html) {
+    if (el.dataset.lastHtml === html) return;
+    el.dataset.lastHtml = html;
+    el.innerHTML = html;
+  }
+
+  function closeEmbeds() {
+    document.querySelectorAll(".kls-embed").forEach((el) => el.remove());
+  }
+
+  function toggleEmbed(trigger, anchor) {
+    const vid = trigger.dataset.embedVid;
+    const sec = Number(trigger.dataset.embedSec) || 0;
+    if (!vid || !VocabLog || !VocabLog.buildEmbedUrl) return false;
+    const key = `${vid}@${sec}`;
+    const existing = document.querySelector(".kls-embed");
+    const sameAnchor = existing && existing.dataset.embedKey === key && existing.previousElementSibling === anchor;
+    closeEmbeds();
+    if (sameAnchor) return true;
+    const watchUrl = trigger.dataset.embedUrl || (VocabLog.buildTimestampUrl ? VocabLog.buildTimestampUrl(vid, sec, false) : "");
+    const box = document.createElement("div");
+    box.className = "kls-embed";
+    box.dataset.embedKey = key;
+    box.innerHTML = `
+      <div class="kls-embed-frame"><iframe src="${esc(VocabLog.buildEmbedUrl(vid, sec))}" title="出典の動画（${esc(formatSec(sec))}）" referrerpolicy="strict-origin-when-cross-origin" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe></div>
+      <div class="kls-embed-bar">
+        <a class="kls-embed-alt" href="${esc(watchUrl)}" target="_blank" rel="noopener">YouTubeで開く</a>
+        <button type="button" class="kls-btn kls-embed-close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg><span>閉じる</span></button>
+      </div>`;
+    box.querySelector(".kls-embed-close").onclick = () => box.remove();
+    anchor.insertAdjacentElement("afterend", box);
+    return true;
+  }
+
+  function embedAnchorFor(trigger) {
+    if (trigger.dataset.embedAnchor) {
+      const t = document.getElementById(trigger.dataset.embedAnchor);
+      if (t) return t.lastElementChild || t;
+    }
+    return trigger.closest(".kls-ex-src") || trigger.closest(".kls-occ-wrap") || trigger;
+  }
+
+  document.addEventListener("click", (ev) => {
+    const trigger = ev.target.closest && ev.target.closest("[data-embed-vid]");
+    if (!trigger || ev.ctrlKey || ev.metaKey || ev.shiftKey) return;
+    if (toggleEmbed(trigger, embedAnchorFor(trigger))) ev.preventDefault();
+  });
+
+  function setVideoButton(btn, primary) {
+    if (!btn) return;
+    if (primary && primary.url) {
+      btn.href = primary.url;
+      const vid = occVideoId(primary);
+      if (vid) {
+        btn.dataset.embedVid = vid;
+        btn.dataset.embedSec = String(Math.max(0, Math.floor(Number(primary.sec) || 0)));
+        btn.dataset.embedUrl = primary.url;
+      } else {
+        delete btn.dataset.embedVid;
+      }
+      btn.querySelector("span").textContent = `該当部分を再生 (${formatSec(primary.sec)})`;
+      btn.classList.remove("kls-hidden");
+    } else {
+      btn.classList.add("kls-hidden");
+    }
   }
 
   function renderCardPane() {
@@ -312,10 +420,12 @@
       document.getElementById("card-source-badge").textContent = "出典なし";
       if (metaBadge) metaBadge.classList.add("kls-hidden");
       vLink.classList.add("kls-hidden");
+      const exBox0 = document.getElementById("card-examples");
+      if (exBox0) setHtml(exBox0, "");
       document.getElementById("card-surface").textContent = "登録カードがありません";
       document.getElementById("card-context").textContent = "「単語一覧・管理」からスターター24語を追加するか、動画から単語を保存してください。";
       document.getElementById("card-answer").classList.add("kls-hidden");
-      if (occBox) occBox.innerHTML = "";
+      if (occBox) setHtml(occBox, "");
       return;
     }
 
@@ -332,17 +442,13 @@
       : primary
         ? `${primary.title || "出典"} · ${formatSec(primary.sec)}`
         : (item.sourceTitle || "出典なし");
-    if (primary && primary.url) {
-      vLink.href = primary.url;
-      vLink.querySelector("span").textContent = `該当部分を再生 (${formatSec(primary.sec)})`;
-      vLink.classList.remove("kls-hidden");
-    } else {
-      vLink.classList.add("kls-hidden");
-    }
+    setVideoButton(vLink, primary);
+    const exBox = document.getElementById("card-examples");
+    if (exBox) setHtml(exBox, renderExamplesHtml(occs, 3, { context: item.context, jaContext: item.jaContext, surface: item.surface }));
     if (occBox) {
-      occBox.innerHTML = occs.length
+      setHtml(occBox, occs.length
         ? `<div class="kls-source-label">出典（クリックで該当部分を再生）</div>${renderOccurrencesHtml(occs, 4)}`
-        : `<div class="kls-muted">視聴動画からの出典はまだありません（動画で登場すると自動で紐付きます）</div>`;
+        : `<div class="kls-muted">視聴動画からの出典はまだありません（動画で登場すると自動で紐付きます）</div>`);
     }
 
     document.getElementById("card-surface").textContent = item.surface;
@@ -383,20 +489,17 @@
         ? `${primary.title || "出典"} · ${formatSec(primary.sec)}`
         : (item.sourceTitle || "穴埋めクイズ");
     const cLink = document.getElementById("btn-cloze-video");
-    if (cLink) {
-      if (primary && primary.url) {
-        cLink.href = primary.url;
-        cLink.querySelector("span").textContent = `該当部分を再生 (${formatSec(primary.sec)})`;
-        cLink.classList.remove("kls-hidden");
-      } else {
-        cLink.classList.add("kls-hidden");
-      }
+    setVideoButton(cLink, primary);
+    const cExBox = document.getElementById("cloze-examples");
+    if (cExBox) {
+      // Example lines would give away the blank, so they appear only after answering.
+      setHtml(cExBox, state.clozeAnswered ? renderExamplesHtml(occs, 3, { context: item.context, jaContext: item.jaContext, surface: item.surface }) : "");
     }
     const cOccBox = document.getElementById("cloze-occurrences");
     if (cOccBox) {
-      cOccBox.innerHTML = occs.length
+      setHtml(cOccBox, occs.length
         ? `<div class="kls-source-label">出典（クリックで該当部分を再生）</div>${renderOccurrencesHtml(occs, 4)}`
-        : "";
+        : "");
     }
     document.getElementById("cloze-prompt").textContent = q.promptLine;
     document.getElementById("cloze-ja").textContent = q.jaContext ? `訳: ${q.jaContext}` : "";
@@ -526,6 +629,7 @@
             </div>
             <div class="kls-card-aligned">${alignedReadingHtml(cardLike)}</div>
             <div>${w.meaning ? esc(w.meaning) : `<span class="kls-muted">意味未登録（「未訳の単語を訳す」で補完可）</span>`}</div>
+            ${renderExamplesHtml(w.occurrences || [], 3)}
             ${renderOccurrencesHtml(w.occurrences, 3)}
           </div>
           <div class="kls-seg">
@@ -560,7 +664,7 @@
         const vUrl = VocabLog.buildTimestampUrl(v.videoId, 0, v.site === "music");
         vRow.innerHTML = `
           <div style="display:grid;gap:2px;flex:1;min-width:200px;">
-            <a class="kls-occ-link" href="${esc(vUrl)}" target="_blank" rel="noopener">${PLAY_ICON}<span class="kls-occ-title">${esc(v.title || v.videoId)}</span></a>
+            <a class="kls-occ-link" href="${esc(vUrl)}" data-embed-vid="${esc(v.videoId)}" data-embed-sec="0" data-embed-url="${esc(vUrl)}">${PLAY_ICON}<span class="kls-occ-title">${esc(v.title || v.videoId)}</span></a>
             <div class="kls-muted">${v.site === "music" ? "YouTube Music" : "YouTube"} · 記録語数 ${v.uniqueWords || 0}語</div>
           </div>
           <button type="button" class="kls-btn" data-fdelvid="${esc(v.videoId)}">${TRASH_ICON}<span>記録を消す</span></button>

@@ -93,7 +93,7 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
                 <span>発音を聴く</span>
               </button>
-              <a id="btn-card-video" href="#" target="_blank" rel="noopener" class="kls-btn">
+              <a id="btn-card-video" href="#" data-embed-anchor="card-occurrences" class="kls-btn">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
                 <span>該当部分を再生</span>
               </a>
@@ -108,6 +108,7 @@
             <div class="kls-stage-body">
               <div id="card-surface" class="kls-stage-word" lang="ko"></div>
               <div id="card-context" class="kls-muted" style="font-size:14px;" lang="ko"></div>
+              <div id="card-examples" class="kls-source-box"></div>
               <div id="card-occurrences" class="kls-source-box"></div>
               <div id="card-answer" class="kls-stage-answer kls-hidden">
                 <div id="card-reading" style="font-size:14px;font-weight:600;color:var(--ui-accent);"></div>
@@ -156,7 +157,7 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
                 <span>文を読み上げ</span>
               </button>
-              <a id="btn-cloze-video" href="#" target="_blank" rel="noopener" class="kls-btn kls-hidden">
+              <a id="btn-cloze-video" href="#" data-embed-anchor="cloze-occurrences" class="kls-btn kls-hidden">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
                 <span>該当部分を再生</span>
               </a>
@@ -172,6 +173,7 @@
               <div id="cloze-prompt" style="font-size:20px;font-weight:700;" lang="ko"></div>
               <div id="cloze-ja" class="kls-muted"></div>
               <div id="cloze-feedback" class="kls-hidden" style="padding-top:8px;border-top:1px solid var(--ui-border);"></div>
+              <div id="cloze-examples" class="kls-source-box"></div>
               <div id="cloze-occurrences" class="kls-source-box"></div>
             </div>
           </div>

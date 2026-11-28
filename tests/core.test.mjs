@@ -537,3 +537,53 @@ test("srs: gradeCard caps intervalDays at MAX_INTERVAL_DAYS, demotes forgotten m
   const ref = q.find((x) => x.surface === "사랑");
   assert.equal(ref._reviewKind, "refresher");
 });
+
+test("vocab_log: pickExamples puts YouTube Music lines first, dedupes, limits, and parseVideoId/buildEmbedUrl build inline-player URLs", () => {
+  const occs = [
+    { videoId: "a", sec: 1, isMusic: false, context: "오늘 정말 설레잖아" },
+    { videoId: "b", sec: 2, isMusic: true, context: "설레고 있어 너 때문에" },
+    { videoId: "c", sec: 3, isMusic: false, context: "오늘 정말  설레잖아" },
+    { videoId: "d", sec: 4, isMusic: true, context: "" },
+    { videoId: "e", sec: 5, isMusic: false, context: "English only line" },
+    { videoId: "f", sec: 6, isMusic: true, context: "설레는 밤이야" },
+    { videoId: "g", sec: 7, isMusic: false, context: "나도 설레" }
+  ];
+  const ex = VocabLog.pickExamples(occs, 3);
+  assert.deepEqual(ex.items.map((o) => o.videoId), ["b", "f", "a"]);
+  assert.equal(ex.total, 4);
+  assert.equal(ex.more, 1);
+  assert.equal(VocabLog.pickExamples([{ videoId: "x", sec: 0 }], 3).items.length, 0);
+  assert.equal(VocabLog.pickExamples(null, 3).total, 0);
+
+  assert.equal(VocabLog.parseVideoId("https://music.youtube.com/watch?v=abc123XYZ_-&t=65s"), "abc123XYZ_-");
+  assert.equal(VocabLog.parseVideoId("https://youtu.be/abc123XYZ_-?t=5"), "abc123XYZ_-");
+  assert.equal(VocabLog.parseVideoId("not a url"), "");
+  assert.equal(
+    VocabLog.buildEmbedUrl("abc123XYZ_-", 65.9),
+    "https://www.youtube-nocookie.com/embed/abc123XYZ_-?start=65&autoplay=1&rel=0&playsinline=1"
+  );
+  assert.equal(VocabLog.buildEmbedUrl("", 5), "");
+});
+
+test("vocab_log: lines are stored clipped to 120 chars and compaction keeps text only for the top examples per word", () => {
+  const long = `설레잖아 ${"가".repeat(200)}`;
+  let store = VocabLog.normalizeStore(null);
+  // 8 videos each containing the word -> 8 candidate lines (4 music, 4 youtube)
+  for (let i = 0; i < 8; i += 1) {
+    const cues = [{ start: 10, ko: i === 0 ? long : `오늘 정말 설레잖아 ${i}`, ja: "訳" }];
+    store = VocabLog.recordVideo(store, { isMusic: i % 2 === 0, videoId: `vid${i}`, title: `T${i}`, author: "x" }, cues, 1000 + i).store;
+  }
+  const occs = store.words["설레다"].occurrences;
+  assert.equal(occs.length, 8);
+  assert.ok(occs.every((o) => o.context.length <= VocabLog.clipContext(o.context).length && o.context.length <= 120));
+  const compacted = VocabLog.compactForStorage(store);
+  const withText = compacted.words["설레다"].occurrences.filter((o) => o.context);
+  assert.equal(withText.length, VocabLog.MAX_EXAMPLES_PER_WORD);
+  const restored = VocabLog.normalizeStore(compacted);
+  const ex = VocabLog.pickExamples(restored.words["설레다"].occurrences, 3);
+  assert.equal(ex.items.length, 3);
+  assert.ok(ex.items.every((o) => o.isMusic), "music lines stay first after a compaction round trip");
+  // Old data without line text is not an error
+  const legacy = VocabLog.normalizeStore({ videos: {}, words: { 단어: { key: "단어", occurrences: [{ videoId: "z", sec: 3 }] } } });
+  assert.equal(VocabLog.pickExamples(legacy.words["단어"].occurrences, 3).items.length, 0);
+});
